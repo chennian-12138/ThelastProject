@@ -1,33 +1,35 @@
 <template>
-    <div class="car">
-        <h2>一辆{{ car.brand }}的车，价值{{ car.price }}万</h2>
-        <button @click="changePrice">修改价格</button>
-        <button @click="changeFirstGame">修改游戏</button>
-        <ul>
-            <li v-for = "item in games" :key = "item.id">{{ item.name }}</li>
-            <!-- 通过这个方式来枚举出列表 -->
-        </ul>
+    <div class="person">
+        姓:<input type = "text" v-model="firstName"><br>
+        名:<input type = "text" v-model="lastName"><br>
+        全名:<span>{{ fullName }}</span><br>
+        <button @click="changeFullName">修改全名</button>
     </div>
 </template>
 
 <script setup lang = 'ts'>
-    import {ref} from 'vue'
-    let car = ref({brand:'奔驰',price:100})
-    // 对对象进行响应式操作，需要使用reactive
-    let games = ref([
-        {id:'game01',name:'原神'},
-        {id:'game02',name:'三国志'},
-        {id:'game03',name:'王者荣耀'},
-    ])
+    import {ref,computed} from 'vue'
 
-    function changePrice(){
-        car.value.price += 10 
+    let firstName = ref("张")
+    let lastName = ref("三")
+
+    let fullName = computed({
+    //     return firstName.value.slice(0,1).toUpperCase() +firstName.value.slice(1)+'-'+lastName.value
+    // // 计算属性是一个只读属性，只能读不能改
+    get(){
+        return firstName.value.slice(0,1).toUpperCase() +firstName.value.slice(1)+'-'+lastName.value
+    },
+    set(val){
+        const [str1,str2] = val.split('-')
+        firstName.value = str1
+        lastName.value = str2
     }
-    function changeFirstGame(){
-        games.value[0].name = "我不知道"
+    // 从这里就可以实现修改
+    })
+    function changeFullName(){
+        fullName.value = "Li-Si"
     }
 </script>
 
 <style scoped>
-li{font-size: 20px;}
 </style>
