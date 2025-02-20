@@ -3,13 +3,8 @@
         <person></person>
 </template>
 
-<script>
-// 这里写JS或者TS代码,Vue推荐使用Ts书写
+<script lang = "ts" setup name = "App">
     import Person from './components/Preson.vue' 
-    export default{
-        name:"App",  // 这里是组件名
-        components:{Person}// 注册组件
-    }
 </script>
 
 <style>
