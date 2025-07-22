@@ -100,3 +100,77 @@ Vue3
 └─ vite.config.ts
 
 ```
+```
+Vue3
+├─ all-code.txt
+├─ backend
+│  ├─ app.js
+│  ├─ controllers
+│  │  └─ auth.controller.js
+│  ├─ models
+│  │  └─ User.js
+│  ├─ routes
+│  │  ├─ auth.routes.js
+│  │  ├─ graph.routes.js
+│  │  ├─ health.routes.js
+│  │  └─ search.routes.js
+│  ├─ test-mongo.cjs
+│  ├─ test-mongo.js
+│  └─ utils
+│     └─ jwt.utils.js
+├─ dump_all_code.mjs
+├─ env.d.ts
+├─ faiss.index
+├─ ids.json
+├─ index.html
+├─ package-lock.json
+├─ package.json
+├─ ProjectTree.txt
+├─ public
+│  ├─ DeepSeek-r1.jpg
+│  ├─ favicon.ico
+│  └─ 头像.png
+├─ query
+├─ README.md
+├─ scripts
+│  ├─ embeddings.json
+│  ├─ faiss_node.index
+│  ├─ fetch_papers.py
+│  ├─ gnn.py
+│  ├─ ids.json
+│  ├─ incremental_fench_embed.py
+│  ├─ Mongo.py
+│  ├─ rebuild_64.py
+│  ├─ semantic_search.py
+│  └─ __pycache__
+│     └─ semantic_search.cpython-311.pyc
+├─ src
+│  ├─ AllCode.txt
+│  ├─ App.vue
+│  ├─ assets
+│  │  ├─ scripts
+│  │  │  └─ App.js
+│  │  └─ styles
+│  │     ├─ App.css
+│  │     └─ bot_test.css
+│  ├─ components
+│  │  ├─ LiteratureGraph.vue
+│  │  ├─ LoginForm.vue
+│  │  └─ RegisterForm.vue
+│  ├─ main.ts
+│  ├─ pages
+│  │  ├─ about_ourselves.vue
+│  │  ├─ bot_test.vue
+│  │  ├─ history.vue
+│  │  ├─ home.vue
+│  │  └─ send.png
+│  ├─ router
+│  │  └─ index.ts
+│  └─ store
+│     └─ history.ts
+├─ tsconfig.app.json
+├─ tsconfig.json
+├─ tsconfig.node.json
+└─ vite.config.ts
+
+```

@@ -51,6 +51,7 @@
 </template>
 
 <script>
+import { useHistoryStore } from '@/store/history';
 export default {
   data() {
     return {
@@ -59,6 +60,18 @@ export default {
       showThink: false,
     };
   },
+//   setup() {
+//   const history = useHistoryStore();
+//   history.add('chat', { role: 'user', text: inputText, timestamp: Date.now() });
+//   history.add('literature', {
+//   keyword: keyword.value,
+//   nodesCount: data.nodes.length,
+//   edgesCount: data.edges.length,
+//   timestamp: Date.now(),
+// });
+//   history.load();               // 刷新后读历史
+//   return { history };
+// },
   methods: {
     async sendMessage() {
       const inputText = this.userInput.trim();
@@ -114,6 +127,13 @@ export default {
 
       // 滚动到底部
       this.scrollToBottom();
+      // // 用户消息 → 存历史
+      // this.history.addChat({ role: 'user', text: inputText, timestamp: Date.now() });
+
+      // // bot 回复 → 存历史
+      // const botText = botResponse.text;
+      // this.messages.push({ type: 'bot', displayText: botText });
+      // this.history.addChat({ role: 'bot', text: botText, timestamp: Date.now() });
     },
     async getBotResponse(prompt) {
       try {

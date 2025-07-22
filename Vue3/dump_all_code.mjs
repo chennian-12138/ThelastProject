@@ -26,41 +26,25 @@ const FILES = [
   'backend/utils/jwt.utils.js',
 
   // 根目录
-  'env.d.ts',
-  'package.json',
-  'README.md',
-  'index.html',
 
   // scripts
-  'scripts/fetch_papers.py',
-  'scripts/gnn.py',
-  'scripts/Mongo.py',
-  'scripts/rebuild_64.py',
+  'scripts/incremental_fetch_embed.py',
   'scripts/semantic_search.py',
-  'scripts/embeddings.json',
-  'scripts/ids.json',
-
   // src
-  'src/main.ts',
   'src/App.vue',
-  'src/router/index.ts',
-  'src/store/history.ts',
   'src/components/LiteratureGraph.vue',
-  'src/components/LoginForm.vue',
-  'src/components/RegisterForm.vue',
-  'src/pages/about_ourselves.vue',
-  'src/pages/bot_test.vue',
+  'src/main.ts',
   'src/pages/history.vue',
   'src/pages/home.vue',
-  'src/assets/scripts/App.js',
-  'src/assets/styles/App.css',
-  'src/assets/styles/bot_test.css',
-
+  'src/router/index.ts',
+  'src/store/history.ts',
   // 配置
-  'tsconfig.json',
-  'tsconfig.app.json',
-  'tsconfig.node.json',
-  'vite.config.ts'
+  'dump_all_code.mjs',
+  'package-lock.json',
+  'ProjectTree.txt',
+  'query',
+  'test_system.py',
+  'vite.config.ts',
 ];
 
 const OUT_FILE = 'all-code.txt';

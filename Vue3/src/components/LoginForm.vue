@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import axios from 'axios';
+import request from '../utils/request';
 import { useRouter } from 'vue-router';
 
 const email = ref('');
@@ -9,7 +9,8 @@ const router = useRouter();
 
 const login = async () => {
   try {
-    await axios.post('/api/auth/login', { email: email.value, password: password.value });
+    const { data } = await request.post('/auth/login', { email: email.value, password: password.value });
+    localStorage.setItem('token', data.token);  // 保存token
     router.replace('/home');          // 登录成功跳主页
   } catch (e: any) {
     alert(e.response?.data?.message || '登录失败');

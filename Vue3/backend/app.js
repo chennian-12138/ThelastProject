@@ -8,6 +8,9 @@ import authRoutes from './routes/auth.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import graphRoutes from './routes/graph.routes.js';
 import searchRoutes from './routes/search.routes.js';
+import historyRoutes from './routes/history.routes.js';
+import fetchRoutes from './routes/fetch.routes.js';
+import tempGraphRoutes from './routes/temp_graph.routes.js';
 
 dotenv.config();
 
@@ -18,6 +21,7 @@ app.use(cors({ origin: true, credentials: true })); // 生产环境换成具体�
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10kb' }));
+
 
 /* ---------- 数据库 ---------- */
 await mongoose
@@ -33,6 +37,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api', healthRoutes);
 app.use('/api', graphRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api', fetchRoutes);
+app.use('/api/history', historyRoutes);
+app.use('/api', tempGraphRoutes);
+console.log('✅ /api/temp_graph 路由已注册');
+
 
 /* ---------- 统一错误处理 ---------- */
 app.use((err, _req, res, _next) => {

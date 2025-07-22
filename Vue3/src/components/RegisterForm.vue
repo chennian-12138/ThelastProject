@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import axios from 'axios';
+import request from '../utils/request';
 import { useRouter } from 'vue-router';
 
 const email = ref('');
@@ -9,7 +9,7 @@ const router = useRouter();
 
 const register = async () => {
   try {
-    await axios.post('/api/auth/register', { email: email.value, password: password.value });
+    await request.post('/auth/register', { email: email.value, password: password.value });
     alert('注册成功！请登录');
     router.replace('/login');
   } catch (e: any) {
@@ -122,4 +122,4 @@ const register = async () => {
   .signup-link a {
     text-decoration: underline;
   }
-</style>   
+</style>

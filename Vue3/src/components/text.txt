@@ -1,0 +1,462 @@
+<template>
+  <div class="literature-graph">
+    <!-- 加载动画 -->
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-container">
+        <div class="loading-text">正在爬取文献数据...</div>
+        <div class="container">
+          <div class="slice"></div>
+          <div class="slice"></div>
+          <div class="slice"></div>
+          <div class="slice"></div>
+          <div class="slice"></div>
+          <div class="slice"></div>
+        </div>
+        <div class="loading-subtext">{{ loadingText }}</div>
+      </div>
+    </div>
+
+    <!-- 批次选择器 -->
+    <div class="batch-selector">
+      <select v-model="selectedBatch" @change="loadBatchData">
+        <option value="">最新批次</option>
+        <option v-for="batch in availableBatches" :key="batch.batchId" :value="batch.batchId">
+          {{ formatBatchName(batch.batchId) }} ({{ batch.paperCount }}篇)
+        </option>
+      </select>
+      <button @click="loadBatchData" :disabled="loading">加载</button>
+    </div>
+
+    <!-- 主内容 -->
+    <svg ref="svgRef" width="100%" height="100%"></svg>
+    <div class="search-input">
+      <input
+        type="text"
+        v-model="keyword"
+        @keyup.enter="doSearch"
+        placeholder="输入关键词搜索文献"
+      />
+      <button @click="doSearch" :disabled="loading">
+        {{ loading ? '搜索中...' : '搜索' }}
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+import * as d3 from 'd3';
+import axios from 'axios';
+import { useHistoryStore } from '@/store/history';
+
+const svgRef = ref<SVGSVGElement | null>(null);
+const history = useHistoryStore();
+const padding1 = 50;
+const loading = ref(false);
+const loadingText = ref('');
+const selectedBatch = ref('');
+const availableBatches = ref<Array<{batchId: string, paperCount: number}>>([]);
+
+// 正确的端口配置
+const API_BASE_URL = 'http://localhost:3001';
+
+/* ---------- 批次管理 ---------- */
+const loadAvailableBatches = async () => {
+  try {
+    const { data } = await axios.get(`${API_BASE_URL}/api/graph/batches`);
+    availableBatches.value = data.batches || [];
+  } catch (error) {
+    console.error('加载批次列表失败:', error);
+    // 如果批次API失败，尝试加载当前批次
+    try {
+      const { data: currentData } = await axios.get(`${API_BASE_URL}/api/graph/current-batch`);
+      if (currentData.batchId) {
+        availableBatches.value = [{
+          batchId: currentData.batchId,
+          paperCount: currentData.paperCount
+        }];
+      }
+    } catch (currentError) {
+      console.error('加载当前批次也失败:', currentError);
+    }
+  }
+};
+
+const formatBatchName = (batchId: string) => {
+  if (batchId === '20240720_initial') return '历史数据';
+  const date = batchId.split('_')[0];
+  const time = batchId.split('_')[1];
+  return `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)} ${time.slice(0,2)}:${time.slice(2,4)}`;
+};
+
+const loadBatchData = async () => {
+  if (loading.value) return;
+  
+  loading.value = true;
+  loadingText.value = selectedBatch.value 
+    ? `正在加载批次 ${formatBatchName(selectedBatch.value)}...`
+    : '正在加载最新批次...';
+  
+  try {
+    const url = selectedBatch.value 
+      ? `${API_BASE_URL}/api/graph/batch?batchId=${selectedBatch.value}`
+      : `${API_BASE_URL}/api/graph/batch?useLatest=true`;
+    
+    const { data } = await axios.get(url);
+    
+    if (data.nodes && data.nodes.length > 0) {
+      renderGraph(data.nodes, data.edges);
+      console.log(`批次 ${data.batchId} 加载完成，共 ${data.nodes.length} 个节点`);
+    } else {
+      console.log('该批次暂无数据');
+    }
+  } catch (error) {
+    console.error('加载批次数据失败:', error);
+    // 回退到原始API
+    try {
+      const { data: fallbackData } = await axios.get(`${API_BASE_URL}/api/graph`);
+      if (fallbackData.nodes && fallbackData.nodes.length > 0) {
+        renderGraph(fallbackData.nodes, fallbackData.edges);
+        console.log('使用回退API加载数据');
+      }
+    } catch (fallbackError) {
+      console.error('回退API也失败:', fallbackError);
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+/* ---------- 关键词搜索 ---------- */
+const keyword = ref('');
+const doSearch = async () => {
+  if (!keyword.value.trim() || loading.value) return;
+  
+  loading.value = true;
+  loadingText.value = `正在搜索 "${keyword.value}" 相关文献...`;
+  
+  try {
+    console.log(`开始爬取关键词: ${keyword.value}`);
+    
+    const { data } = await axios.get(
+      `${API_BASE_URL}/api/fetch?q=${encodeURIComponent(keyword.value)}`
+    );
+    
+    console.log('爬取完成:', data.message);
+    console.log('nodes.length =', data.nodes?.length, 'edges =', data.edges);
+    
+    if (!data.nodes || data.nodes.length === 0) {
+      loadingText.value = '未找到相关文献，请尝试其他关键词';
+      setTimeout(() => {
+        loading.value = false;
+      }, 2000);
+      return;
+    }
+
+    loadingText.value = `找到 ${data.nodes.length} 篇文献，正在生成图谱...`;
+    
+    // 延迟一下让动画更流畅
+    setTimeout(() => {
+      renderGraph(data.nodes, data.edges);
+      loading.value = false;
+      
+      // 重新加载批次列表
+      loadAvailableBatches();
+      
+      /* 历史记录 - 可选，避免401错误 */
+      try {
+        history.add('literature', {
+          keyword: keyword.value,
+          nodesCount: data.nodes.length,
+          edgesCount: data.edges.length,
+          timestamp: Date.now(),
+        });
+      } catch (error) {
+        console.warn('历史记录添加失败（可能需要登录）:', error);
+      }
+    }, 1000);
+    
+  } catch (error) {
+    console.error('搜索失败:', error);
+    loadingText.value = '搜索失败，请重试';
+    setTimeout(() => {
+      loading.value = false;
+    }, 2000);
+  }
+};
+
+/* ---------- 图渲染函数 ---------- */
+const renderGraph = (nodesData: any[], edgesData: any[]) => {
+  const width = 1200, height = 1000;
+
+  // 清除之前的图
+  d3.select(svgRef.value).selectAll('*').remove();
+  const svg = d3.select(svgRef.value).attr('viewBox', `0 0 ${width} ${height}`);
+  const g = svg.append('g');
+
+  // 创建tooltip
+  const tooltipDiv = d3.select('body').selectAll('.tooltip').data([null])
+    .enter().append('div')
+    .attr('class', 'tooltip')
+    .style('position', 'absolute')
+    .style('background', 'rgba(0, 0, 0, 0.8)')
+    .style('color', 'white')
+    .style('padding', '10px')
+    .style('border-radius', '5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .style('font-size', '12px')
+    .style('max-width', '300px');
+
+  // 准备数据
+  const nodes = nodesData.map((d, idx) => ({ ...d, _index: idx }));
+  const validEdges = (edgesData || [])
+    .filter((e: any) => e.source < nodes.length && e.target < nodes.length);
+
+  // 计算边界并缩放
+  const padding = 50;
+  const xValues = nodes.map((d: any) => d.x).filter((x: any) => x !== undefined);
+  const yValues = nodes.map((d: any) => d.y).filter((y: any) => y !== undefined);
+
+  if (xValues.length === 0 || yValues.length === 0) {
+    // 如果没有坐标，生成随机布局
+    nodes.forEach((d: any, i: number) => {
+      d.x = (Math.random() - 0.5) * 800;
+      d.y = (Math.random() - 0.5) * 600;
+    });
+  } else {
+    // 使用现有坐标并缩放
+    const xMin = Math.min(...xValues), xMax = Math.max(...xValues);
+    const yMin = Math.min(...yValues), yMax = Math.max(...yValues);
+    
+    const xScale = d3.scaleLinear()
+      .domain([xMin, xMax])
+      .range([padding, width - padding]);
+      
+    const yScale = d3.scaleLinear()
+      .domain([yMin, yMax])
+      .range([padding, height - padding]);
+
+    nodes.forEach((d: any) => {
+      d.x = xScale(d.x);
+      d.y = yScale(d.y);
+    });
+  }
+
+  // 创建力导向图
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(validEdges).distance(80))
+    .force('charge', d3.forceManyBody().strength(-100))
+    .force('center', d3.forceCenter(width / 2, height / 2));
+
+  const link = g.append('g')
+    .selectAll('line')
+    .data(validEdges)
+    .enter().append('line')
+    .attr('stroke', '#999')
+    .attr('stroke-width', 1);
+
+  const node = g.append('g')
+    .selectAll('circle')
+    .data(nodes)
+    .enter().append('circle')
+    .attr('r', 6)
+    .attr('fill', (d: any) => d3.schemeCategory10[d.year % 10])
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5)
+    .call(
+      d3.drag<SVGCircleElement, any>()
+        .on('start', (e, d) => { 
+          simulation.alphaTarget(0.3).restart(); 
+          d.fx = d.x; 
+          d.fy = d.y; 
+        })
+        .on('drag', (e, d) => { 
+          d.fx = e.x; 
+          d.fy = e.y; 
+        })
+        .on('end', (e, d) => { 
+          simulation.alphaTarget(0); 
+          d.fx = null; 
+          d.fy = null; 
+        })
+    )
+    .on('mouseover', (e, d: any) => {
+      tooltipDiv
+        .style('opacity', 1)
+        .html(`
+          <strong>${d.title}</strong><br/>
+          <strong>作者:</strong> ${d.authors?.join?.(', ') || '未知'}<br/>
+          <strong>年份:</strong> ${d.year || '未知'}<br/>
+          <strong>摘要:</strong> ${d.abstract ? d.abstract.substring(0, 100) + '...' : '无摘要'}
+        `)
+        .style('left', `${e.pageX + 10}px`)
+        .style('top', `${e.pageY - 10}px`);
+    })
+    .on('mouseout', () => tooltipDiv.style('opacity', 0));
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', (d: any) => d.source.x)
+      .attr('y1', (d: any) => d.source.y)
+      .attr('x2', (d: any) => d.target.x)
+      .attr('y2', (d: any) => d.target.y);
+    node
+      .attr('cx', (d: any) => (d.x = Math.max(padding, Math.min(width - padding1, d.x))))
+      .attr('cy', (d: any) => (d.y = Math.max(padding, Math.min(height - padding1, d.y))));
+  });
+};
+
+/* ---------- 初始加载 ---------- */
+onMounted(async () => {
+  await loadAvailableBatches();
+  await loadBatchData();
+});
+</script>
+
+<style scoped>
+@import url("../assets/styles/LiteratureGraph.css");
+
+/* 批次选择器 */
+.batch-selector {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.batch-selector select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
+}
+
+.batch-selector button {
+  padding: 8px 16px;
+  background: #334dff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.batch-selector button:hover:not(:disabled) {
+  background: #2238cc;
+}
+
+.batch-selector button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 加载动画样式 */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-container {
+  text-align: center;
+}
+
+.loading-text {
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.loading-subtext {
+  font-size: 14px;
+  color: #666;
+  margin-top: 15px;
+}
+
+/* 加载动画样式 */
+.container {
+  --uib-size: 80px;
+  --uib-speed: 2.5s;
+  --uib-color: #334dff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: var(--uib-size);
+  width: var(--uib-size);
+}
+
+.slice {
+  position: relative;
+  height: calc(var(--uib-size) / 6);
+  width: 100%;
+}
+
+.slice::before,
+.slice::after {
+  --uib-a: calc(var(--uib-speed) / -2);
+  --uib-b: calc(var(--uib-speed) / -6);
+  content: "";
+  position: absolute;
+  top: 0;
+  left: calc(50% - var(--uib-size) / 12);
+  height: 100%;
+  width: calc(100% / 6);
+  border-radius: 50%;
+  background-color: var(--uib-color);
+  flex-shrink: 0;
+  animation: orbit var(--uib-speed) linear infinite;
+  transition: background-color 0.3s ease;
+}
+
+.slice:nth-child(1)::after { animation-delay: var(--uib-a); }
+.slice:nth-child(2)::before { animation-delay: var(--uib-b); }
+.slice:nth-child(2)::after { animation-delay: calc(var(--uib-a) + var(--uib-b)); }
+.slice:nth-child(3)::before { animation-delay: calc(var(--uib-b) * 2); }
+.slice:nth-child(3)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 2); }
+.slice:nth-child(4)::before { animation-delay: calc(var(--uib-b) * 3); }
+.slice:nth-child(4)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 3); }
+.slice:nth-child(5)::before { animation-delay: calc(var(--uib-b) * 4); }
+.slice:nth-child(5)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 4); }
+.slice:nth-child(6)::before { animation-delay: calc(var(--uib-b) * 5); }
+.slice:nth-child(6)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 5); }
+
+@keyframes orbit {
+  0% { transform: translateX(calc(var(--uib-size) * 0.25)) scale(0.73684); opacity: 0.65; }
+  25% { transform: translateX(0%) scale(0.47368); opacity: 0.3; }
+  50% { transform: translateX(calc(var(--uib-size) * -0.25)) scale(0.73684); opacity: 0.65; }
+  75% { transform: translateX(0%) scale(1); opacity: 1; }
+  100% { transform: translateX(calc(var(--uib-size) * 0.25)) scale(0.73684); opacity: 0.65; }
+}
+
+.slice:nth-child(1)::before,
+.slice:nth-child(1)::after { background-color: #334dff; }
+.slice:nth-child(2)::before,
+.slice:nth-child(2)::after { background-color: #333eff; }
+.slice:nth-child(3)::before,
+.slice:nth-child(3)::after { background-color: #3334ff; }
+.slice:nth-child(4)::before,
+.slice:nth-child(4)::after { background-color: #4433ff; }
+.slice:nth-child(5)::before,
+.slice:nth-child(5)::after { background-color: #6633ff; }
+.slice:nth-child(6)::before,
+.slice:nth-child(6)::after { background-color: #9933ff; }
+
+/* 搜索按钮禁用状态 */
+.search-input button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+</style>
