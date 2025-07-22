@@ -1,24 +1,29 @@
-// 创建一个路由器，并暴露出去
+import { createRouter, createWebHashHistory } from 'vue-router';
 
-// 第一步：引入createrRouter
-import { createRouter,createWebHistory } from 'vue-router';
-// import { routes } from "vue-router/auto-routes";
-// 引入可能要使用的组件
-import home from '@/components/home.vue';
-import bot_test from "@/components/bot_test.vue";
-import about_ourselves from "@/components/about_ourselves.vue";
-import history from "@/components/history.vue";
+import home            from '@/pages/home.vue';
+import bot_test        from '@/pages/bot_test.vue';
+import about_ourselves from '@/pages/about_ourselves.vue';
+import history         from '@/pages/history.vue';
+import Login           from '@/components/LoginForm.vue';
+import Register        from '@/components/RegisterForm.vue';
+import LiteratureGraph from '@/components/LiteratureGraph.vue';
 
-
-// 第二步：创建路由器
 const router = createRouter({
-    history:createWebHistory(),
-    routes:[
-        {path:'/home',component:home,},
-        {path:'/Bot_test',component:bot_test},
-        {path:'/About_ourselves',component:about_ourselves},
-        {path:'/History',component:history}
-    ]
-})
+  history: createWebHashHistory(),
+  routes: [
+    { name: 'firstPage',  path: '/home',            component: home },
+    { name: 'secondPage', path: '/Bot_test',        component: bot_test },
+    { name: 'thirdPage',  path: '/About_ourselves', component: about_ourselves },
+    { name: 'forthPage',  path: '/History',         component: history },
+    { name: 'literatureGraph', path: '/graph', component: LiteratureGraph },
 
-export default router
+    // 登录 / 注册
+    { name: 'login',    path: '/login',    component: Login },
+    { name: 'register', path: '/register', component: Register },
+
+    // 默认重定向
+    { path: '/', redirect: '/home' },
+  ],
+});
+
+export default router;

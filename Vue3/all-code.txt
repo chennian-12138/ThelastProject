@@ -1,0 +1,1605 @@
+Project Full Code Dump
+Generated: 2025-07-18T02:34:48.346Z
+Project Root: F:\somethingForWeb\Vue\Vue3
+
+
+===== backend/app.js =====
+
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+import authRoutes from './routes/auth.routes.js';
+import healthRoutes from './routes/health.routes.js';
+import graphRoutes from './routes/graph.routes.js';
+import searchRoutes from './routes/search.routes.js';
+
+dotenv.config();
+
+const app = express();
+
+/* ---------- 中间件 ---------- */
+app.use(cors({ origin: true, credentials: true })); // 生产环境换成具体域名
+app.use(helmet());
+app.use(morgan('dev'));
+app.use(express.json({ limit: '10kb' }));
+
+/* ---------- 数据库 ---------- */
+await mongoose
+  .connect(process.env.MONGO_URI || 'mongodb://localhost:27017/vue_papers')
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
+/* ---------- 路由 ---------- */
+app.use('/api/auth', authRoutes);
+app.use('/api', healthRoutes);
+app.use('/api', graphRoutes);
+app.use('/api/search', searchRoutes);
+
+/* ---------- 统一错误处理 ---------- */
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(err.status || 500).json({
+    message: err.message || '内部服务器错误',
+  });
+});
+
+/* ---------- 启动 ---------- */
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+
+===== backend/controllers/auth.controller.js =====
+
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+
+const SALT_ROUNDS = 12;
+
+/* 注册 */
+export const register = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: '缺少字段' });
+
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(409).json({ message: '邮箱已注册' });
+
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const user = await User.create({ email, password: hash });
+
+    res.status(201).json({ message: '注册成功', user: { id: user._id, email: user.email } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/* 登录 */
+export const login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: '缺少字段' });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ message: '用户不存在' });
+
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).json({ message: '密码错误' });
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '24h',
+    });
+
+    res.json({ token, user: { id: user._id, email: user.email } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+===== backend/models/User.js =====
+
+import mongoose from 'mongoose';
+
+const userSchema = new mongoose.Schema(
+  {
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 6,
+    },
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model('User', userSchema);
+
+===== backend/routes/auth.routes.js =====
+
+import { Router } from 'express';
+import { register, login } from '../controllers/auth.controller.js';
+
+const router = Router();
+
+router.post('/register', register);
+router.post('/login', login);
+
+export default router;
+
+===== backend/routes/graph.routes.js =====
+
+import express from 'express';
+import mongoose from 'mongoose';
+const router = express.Router();
+
+router.get('/graph', async (_req, res) => {
+  // 1️⃣ 一次性取出所有需要的字段
+  const docs = await mongoose.connection.db
+    .collection('papers')
+    .find(
+      { gnn_embedding: { $exists: true } },            // 只拿已嵌入的
+      {
+        projection: {
+          paperId: 1,
+          title: 1,
+          abstract: 1,
+          authors: 1,
+          year: 1,
+          gnn_embedding: 1,
+          references: 1
+        }
+      }
+    )
+    .toArray();
+
+  // 2️⃣ 建立 paperId → index 映射
+  const id2idx = {};
+  docs.forEach((d, i) => (id2idx[d.paperId] = i));
+
+  // 3️⃣ 构造节点
+  const nodes = docs.map((d, i) => ({
+    id: d.paperId,
+    title: d.title || '',
+    abstract: d.abstract || '',
+    authors: d.authors || [],
+    year: d.year || 2020,
+    embedding: d.gnn_embedding,
+    x: 0,                       // 前端会再随机/力导向
+    y: 0,
+  }));
+
+  // 4️⃣ 构造 links（索引数组，两边都在库里的才保留）
+  const edges = [];
+  docs.forEach((d, i) => {
+    (d.references || [])
+      .map(r => id2idx[r])
+      .filter(j => j !== undefined)
+      .forEach(j => edges.push({ source: i, target: j }));
+  });
+
+  res.json({ nodes, edges });
+});
+
+export default router;
+
+===== backend/routes/health.routes.js =====
+
+import { Router } from 'express';
+const router = Router();
+
+router.get('/health', (_req, res) =>
+  res.json({ status: 'OK', timestamp: new Date(), env: process.env.NODE_ENV })
+);
+
+export default router;
+
+===== backend/routes/search.routes.js =====
+
+import express from 'express';
+import faiss from 'faiss-node';          // npm i faiss-node
+import fs from 'fs';
+import { IndexFlatIP } from 'faiss-node';
+const router = express.Router();
+
+const index = new IndexFlatIP(64);
+index.read('faiss.index');
+const ids   = JSON.parse(fs.readFileSync('ids.json', 'utf-8'));
+
+// 本地 Ollama 向量化
+async function embed(text) {
+  const res = await fetch('http://localhost:11434/api/embeddings', {
+    method: 'POST',
+    body: JSON.stringify({ model: 'nomic-embed-text', prompt: text })
+  });
+  return (await res.json()).embedding;
+}
+
+router.get('/search', async (req, res) => {
+  const q = req.query.q || '';
+  const vec = await embed(q);
+  const qVec = new Float32Array(vec);
+  const { distances, labels } = index.search(qVec, 50);   // Top-50
+
+  // 取 50 篇 + 1 跳引用
+  const paperSet = new Set(labels.map(i => ids[i]));
+  docs.forEach(d => {
+    if (paperSet.has(d.paperId)) {
+      (d.references || []).forEach(r => paperSet.add(r));
+    }
+  });
+
+  const subDocs = docs.filter(d => paperSet.has(d.paperId));
+  const id2idx = {};
+  subDocs.forEach((d, i) => (id2idx[d.paperId] = i));
+
+  const nodes = subDocs.map((d, i) => ({
+    id: d.paperId,
+    title: d.title || '',
+    abstract: d.abstract || '',
+    authors: d.authors || [],
+    year: d.year || 2020,
+    embedding: d.gnn_embedding,
+    x: 0,
+    y: 0
+  }));
+
+  const edges = [];
+  subDocs.forEach((d, i) => {
+    (d.references || [])
+      .map(r => id2idx[r])
+      .filter(j => j !== undefined)
+      .forEach(j => edges.push({ source: i, target: j }));
+  });
+
+  res.json({ nodes, edges });
+});
+
+export default router;
+
+===== backend/test-mongo.cjs =====
+
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+async function testMongo() {
+  try {
+    // 使用本地环境变量
+    const uri = 'mongodb://localhost:27017/vue_auth';
+    await mongoose.connect(uri, {
+    });
+    console.log('MongoDB连接成功');
+    mongoose.disconnect();
+  } catch (error) {
+    console.error('MongoDB连接失败:', error.message);
+  }
+}
+
+testMongo();
+
+===== backend/test-mongo.js =====
+
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+async function testMongo() {
+  try {
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/vue_auth', {
+    });
+    console.log('MongoDB连接成功');
+    mongoose.disconnect();
+  } catch (error) {
+    console.error('MongoDB连接失败:', error.message);
+  }
+}
+
+testMongo();
+
+===== backend/utils/jwt.utils.js =====
+
+import jwt from 'jsonwebtoken';
+
+export const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ message: '缺少令牌' });
+
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    res.status(403).json({ message: '无效令牌' });
+  }
+};
+
+===== env.d.ts =====
+
+/// <reference types="vite/client" />
+// 这是为了让Vue认识其他类型的文件的，称为声明文件
+declare module "*.vue" {
+    import { DefineComponent } from "vue";
+    const component: DefineComponent<{}, {}, any>;
+    export default component;
+}
+// 解决不认识引入文件的问题
+
+===== package.json =====
+
+{
+  "name": "vue3",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build",
+    "backend": "node backend/app.js"
+  },
+  "dependencies": {
+    "@types/d3": "^7.4.3",
+    "axios": "^1.7.9",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "d3": "^7.9.0",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "faiss-node": "^0.5.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.3",
+    "morgan": "^1.10.0",
+    "npyjs": "^0.7.0",
+    "pinia": "^3.0.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/node": "^22.13.4",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/tsconfig": "^0.7.0",
+    "npm-run-all2": "^7.0.2",
+    "typescript": "~5.7.3",
+    "vite": "^6.1.0",
+    "vite-plugin-vue-devtools": "^7.7.2",
+    "vue-tsc": "^2.2.2"
+  }
+}
+
+
+===== README.md =====
+
+# Vue3
+
+This template should help get you started developing with Vue 3 in Vite.
+
+## Recommended IDE Setup
+
+[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+
+## Type Support for `.vue` Imports in TS
+
+TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+
+## Customize configuration
+
+See [Vite Configuration Reference](https://vite.dev/config/).
+
+## Project Setup
+
+```sh
+npm install
+```
+
+### Compile and Hot-Reload for Development
+
+```sh
+npm run dev
+```
+
+### Type-Check, Compile and Minify for Production
+
+```sh
+npm run build
+```
+
+```
+Vue3
+├─ backend
+│  ├─ app.js
+│  ├─ controllers
+│  │  └─ auth.controller.js
+│  ├─ models
+│  │  └─ User.js
+│  ├─ routes
+│  │  ├─ auth.routes.js
+│  │  ├─ graph.routes.js
+│  │  ├─ health.routes.js
+│  │  └─ search.routes.js
+│  ├─ test-mongo.cjs
+│  ├─ test-mongo.js
+│  └─ utils
+│     └─ jwt.utils.js
+├─ env.d.ts
+├─ faiss.index
+├─ ids.json
+├─ index.html
+├─ package-lock.json
+├─ package.json
+├─ public
+│  ├─ DeepSeek-r1.jpg
+│  ├─ favicon.ico
+│  └─ 头像.png
+├─ query
+├─ README.md
+├─ scripts
+│  ├─ embeddings.json
+│  ├─ fetch_papers.py
+│  ├─ gnn.py
+│  ├─ ids.json
+│  ├─ Mongo.py
+│  ├─ rebuild_64.py
+│  └─ semantic_search.py
+├─ src
+│  ├─ AllCode.txt
+│  ├─ App.vue
+│  ├─ assets
+│  │  ├─ scripts
+│  │  │  └─ App.js
+│  │  └─ styles
+│  │     ├─ App.css
+│  │     └─ bot_test.css
+│  ├─ components
+│  │  ├─ LiteratureGraph.vue
+│  │  ├─ LoginForm.vue
+│  │  └─ RegisterForm.vue
+│  ├─ main.ts
+│  ├─ pages
+│  │  ├─ about_ourselves.vue
+│  │  ├─ bot_test.vue
+│  │  ├─ history.vue
+│  │  ├─ home.vue
+│  │  └─ send.png
+│  ├─ ProjectTree.txt
+│  ├─ router
+│  │  └─ index.ts
+│  └─ store
+│     └─ history.ts
+├─ tsconfig.app.json
+├─ tsconfig.json
+├─ tsconfig.node.json
+└─ vite.config.ts
+
+```
+
+===== index.html =====
+
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vite App</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+
+
+===== scripts/fetch_papers.py =====
+
+import os
+import requests
+from pymongo import MongoClient
+from dotenv import load_dotenv
+
+# 1. 读配置
+load_dotenv()
+client = MongoClient(os.getenv("MONGO_URI"))
+db = client.get_default_database()
+papers = db.papers
+
+# 2. Semantic Scholar API（免费，无需 key）
+URL = "https://api.semanticscholar.org/graph/v1/paper/search"
+PARAMS = {
+    "query": "fruit detection deep learning",
+    "fields": "paperId,title,year,authors,references",
+    "limit": 100,
+}
+
+# 3. 爬取 & 入库
+def fetch():
+    resp = requests.get(URL, params=PARAMS)
+    resp.raise_for_status()
+    data = resp.json()
+    docs = []
+    for p in data.get("data", []):
+        docs.append({
+            "paperId": p["paperId"],
+            "title": p["title"],
+            "year": p.get("year"),
+            "authors": [a["name"] for a in p.get("authors", [])],
+            "references": [r["paperId"] for r in (p.get("references") or [])],        })
+    if docs:
+        papers.insert_many(docs, ordered=False)
+        print(f"✅ 已插入 {len(docs)} 篇文献")
+    else:
+        print("⚠️ 未检索到数据")
+
+if __name__ == "__main__":
+    fetch()
+
+===== scripts/gnn.py =====
+
+import torch, os, numpy as np, torch.nn as nn
+from pymongo import MongoClient
+from torch_geometric.data import Data
+from torch_geometric.nn import LightGCN
+from sklearn.model_selection import train_test_split
+from dotenv import load_dotenv
+from torch_geometric.nn import GCNConv   # ← 新增
+import json, os
+
+class GCNClassifier(nn.Module):
+    def __init__(self, in_dim, hidden_dim, num_classes):
+        super().__init__()
+        self.conv1 = GCNConv(in_dim, hidden_dim)
+        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+        self.lin = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index).relu()
+        x = self.conv2(x, edge_index).relu()
+        return self.lin(x)
+    
+load_dotenv()
+client = MongoClient(os.getenv("MONGO_URI"))
+papers = client.get_default_database().papers
+
+# 1️⃣ 拿全部 100 篇文献
+docs = list(papers.find({"embedding": {"$exists": True}},
+                        {"paperId": 1, "embedding": 1, "year": 1, "references": 1}))
+num_nodes = len(docs)
+id2idx = {d["paperId"]: i for i, d in enumerate(docs)}   # 0~99 连续整数
+
+missing = 0
+for d in docs:
+    for rid in (d.get("references") or []):
+        if rid not in id2idx:
+            missing += 1
+# print("missing references:", missing)
+
+# 2️⃣ 构造边（仅保留两端都在 id2idx 里的引用）
+edge_index = []
+for i, d in enumerate(docs):
+    for rid in (d.get("references") or []):
+        j = id2idx.get(rid)
+        if j is not None:
+            edge_index.append([i, j])
+edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
+# 补自环，确保所有 100 个节点都有连接
+self_loops = torch.arange(num_nodes).repeat(2, 1)
+edge_index = torch.cat([edge_index, self_loops], dim=1)
+
+# print("total edges:", len(edge_index))
+
+# 3️⃣ 特征 & 标签
+x = torch.tensor([d["embedding"] for d in docs], dtype=torch.float)  # (100,384)
+y = torch.tensor([d.get("year", 2020) for d in docs], dtype=torch.long)
+
+# 4️⃣ 数据集划分
+train_idx, test_idx = train_test_split(range(num_nodes), test_size=0.2, random_state=42)
+train_mask = torch.zeros(num_nodes, dtype=torch.bool); train_mask[train_idx] = True
+test_mask  = torch.zeros(num_nodes, dtype=torch.bool); test_mask[test_idx] = True
+
+with torch.no_grad():          # ← 关键：不保留梯度
+    proj = nn.Linear(384, 64)
+    x = proj(x)                # (100,64) 直接算完
+
+data = Data(x=x, edge_index=edge_index, y=y,
+            train_mask=train_mask, test_mask=test_mask)
+
+# print("edge_index shape:", data.edge_index.shape)
+# print("num_nodes:", num_nodes)
+
+# 5️⃣ 训练
+num_classes = y.max().item() + 1
+model = GCNClassifier(in_dim=64, hidden_dim=64, num_classes=num_classes)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+for epoch in range(100):
+    out = model(data.x, data.edge_index)
+    loss = nn.functional.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+    optimizer.zero_grad(); loss.backward(); optimizer.step()
+    if epoch % 10 == 0:
+        print(f"epoch {epoch}  loss {loss.item():.4f}")
+
+# 6️⃣ 保存 64 维 GNN 嵌入
+with torch.no_grad():
+    emb = model(data.x, data.edge_index).cpu().numpy()
+for i, d in enumerate(docs):
+    papers.update_one({"paperId": d["paperId"]},
+                      {"$set": {"gnn_embedding": emb[i].tolist()}})
+print("✅ GNN 训练完成，100 篇文献全部拿到 64 维嵌入")
+
+# 7️⃣ 导出给前端（清洗版）
+docs_with_emb = list(papers.find({"gnn_embedding": {"$exists": True}}))
+
+import re
+def clean_str(s):
+    if not isinstance(s, str):
+        return s
+    # 统一英文双引号，去掉多余符号
+    s = re.sub(r'[“”]', '"', s)
+    s = re.sub(r'[‘’]', "'", s)
+    s = re.sub(r'[，]', ',', s)
+    return s.strip()
+
+graph_json = []
+for d in docs_with_emb:
+    # 确保字段存在且类型正确
+    title   = clean_str(d.get("title", ""))
+    authors = [clean_str(a) for a in d.get("authors", []) if a]
+    year    = int(d.get("year", 2020))
+    refs    = [id2idx[r] for r in d.get("references", []) if r in id2idx]
+
+    graph_json.append({
+        "id": d["paperId"],
+        "title": title,
+        "abstract": clean_str(d.get("abstract", "")),
+        "authors": authors,
+        "year": year,
+        "embedding": d["gnn_embedding"],
+        "x": 0,
+        "y": 0,
+        "links": refs
+    })
+
+# 输出到 public/graph.json
+import pathlib, json
+pathlib.Path("public").mkdir(exist_ok=True)
+with open("public/graph.json", "w", encoding="utf-8") as f:
+    json.dump(graph_json, f, ensure_ascii=False, indent=2)
+
+print("✅ graph.json 已生成，共", len(graph_json), "条记录")
+
+===== scripts/Mongo.py =====
+
+from pymongo import MongoClient
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+client = MongoClient(os.getenv("MONGO_URI"))
+
+# 先不筛选，直接拿一篇
+doc = client.get_default_database().papers.find_one()
+if doc:
+    print("字段列表：", list(doc.keys()))
+else:
+    print("⚠️ 集合里没有文档，请检查数据库/集合名或数据是否导入成功。")
+
+===== scripts/rebuild_64.py =====
+
+import os, pymongo, faiss, numpy as np, json
+client = pymongo.MongoClient(os.getenv("MONGO_URI"))
+docs = list(client["vue_papers"].papers.find({"gnn_embedding": {"$exists": True}}))
+
+# 统一裁剪 / 填充到 64
+vecs = [d["gnn_embedding"][:64] for d in docs] + \
+       [d["gnn_embedding"] + [0]*(64-len(d["gnn_embedding"])) for d in docs if len(d["gnn_embedding"])<64]
+
+vecs = np.array(vecs).astype('float32')
+index = faiss.IndexFlatIP(64)
+index.add(vecs)
+index.write('faiss_node.index')
+json.dump([d["paperId"] for d in docs], open("ids.json", "w"))
+print("✅ 统一 64 维索引完成")
+
+===== scripts/semantic_search.py =====
+
+import os, json, pymongo, requests, faiss, numpy as np
+from fastapi import FastAPI, Query
+
+# 0. 环境
+MONGO_URI = os.getenv("MONGO_URI")
+OLLAMA_URL = "http://localhost:11434/api/embeddings"
+MODEL = "nomic-embed-text"
+
+# 1. Mongo 连接
+client = pymongo.MongoClient(MONGO_URI)
+papers = client["vue_papers"].papers
+
+# 2. 一次性载入索引（启动时跑一次）
+docs = list(papers.find({"gnn_embedding": {"$exists": True}}))
+ids  = [d["paperId"] for d in docs]
+vecs = np.array([d["gnn_embedding"] for d in docs]).astype('float32')
+index = faiss.IndexFlatIP(vecs.shape[1])
+index.add(vecs)
+
+# 3. 关键词向量化
+def embed(text: str) -> list:
+    return requests.post(
+        OLLAMA_URL,
+        json={"model": MODEL, "prompt": text}
+    ).json()["embedding"]
+
+# 4. FastAPI 路由
+app = FastAPI()
+@app.get("/api/search")
+def search(q: str = Query(...), k: int = 50):
+    embed_vec = embed(q)
+    if len(embed_vec) != index.d:
+        return {"error": f"维度不匹配：查询 {len(embed_vec)} vs 索引 {index.d}"}
+    vec = np.array([embed_vec], dtype='float32')
+    _, labels = index.search(vec, k)
+
+    top_k = [docs[i] for i in labels[0]]
+    paper_set = {d["paperId"] for d in top_k}
+    for d in top_k:
+        paper_set.update(d.get("references", []))
+
+    sub_docs = [d for d in docs if d["paperId"] in paper_set]
+    id2idx = {d["paperId"]: i for i, d in enumerate(sub_docs)}
+
+    nodes = [{
+        "id": d["paperId"],
+        "title": d["title"],
+        "authors": d["authors"],
+        "year": d["year"],
+    } for d in sub_docs]
+
+    edges = [
+        {"source": id2idx[d["paperId"]], "target": id2idx[r]}
+        for d in sub_docs
+        for r in d.get("references", [])
+        if r in id2idx
+    ]
+    return {"nodes": nodes, "edges": edges}
+    print("索引维度(index.d):", index.d)
+    print("查询向量维度(vec.shape):", vec.shape)
+    print("向量实际长度:", len(vec.reshape(-1)))
+
+# 5. 一键启动
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=3001)
+
+
+===== scripts/embeddings.json =====
+
+[[-19.96796226501465, -21.061660766601562, -22.359731674194336, -22.8806209564209, -21.39983558654785, -22.95241355895996, -22.355911254882812, -24.582605361938477, -21.93712615966797, -21.15782928466797, -21.057968139648438, -21.791606903076172, -22.944347381591797, -22.683401107788086,
+...........16.024324417114258, 17.631019592285156, 18.605186462402344, 21.026723861694336, 22.94322395324707, 18.666545867919922]]
+===== scripts/ids.json =====
+
+[]
+
+===== src/main.ts =====
+
+import { createApp } from "vue";
+// 引入createApp用于创建应用
+import App from './App.vue'
+// 引入App根组件
+// 引入路由器
+import router from "./router";
+// 引入pinia
+import { createPinia } from "pinia";
+
+
+const app = createApp(App)
+// 创建整个应用
+const pinia = createPinia()
+
+app.use(pinia)
+app.use(router)
+app.mount('#app')
+// 创建路由环境，并挂载整个应用到app容器中
+
+===== src/App.vue =====
+
+<template>
+    <!-- 导航区 -->
+
+    <div class="forRobort">
+
+    <nav class="sidebar">
+        <ul class="nav-list">
+            <!-- 单独拎出“我的主页” -->
+            <li class="nav-item" id="nav-logo" :class="{ active: currentRoute === '/home' }" @click="setActiveLink('/home')">
+                <RouterLink  replace :to="{path:'/home'}">
+                    <div class="icon">
+                        <div class="image-box">
+                            <img src="../public/头像.png" alt="My Home">
+                        </div>
+                    </div>
+                </RouterLink>
+            </li>
+
+            <li
+                v-for="item in navItems"
+                :key="item.path"
+                class="nav-item"
+                :class="{ active: currentRoute === item.path }"
+                @click="setActiveLink(item.path)"
+            >
+                <RouterLink replace :to="{path:item.path}">
+                    <div class="icon">
+                        <div v-if="item.image" class="image-box">
+                            <img :src="item.image" alt="">
+                        </div>
+                    </div>
+                </RouterLink>
+            </li>            
+            <hr>
+        
+            <label class="theme-switch">
+                <span class="sun" v-if="!isDarkMode">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <g fill="#4f6f57">
+                            <circle r="5" cy="12" cx="12"></circle>
+                            <path d="m21 13h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 0 2zm-17 0h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 0 2zm13.66-5.66a1 1 0 0 1 -.66-.29 1 1 0 0 1 0-1.41l.71-.71a1 1 0 1 1 1.41 1.41l-.71.71a1 1 0 0 1 -.75.29zm-12.02 12.02a1 1 0 0 1 -.71-.29 1 1 0 0 1 0-1.41l.71-.66a1 1 0 0 1 1.41 1.41l-.71.71a1 1 0 0 1 -.7.24zm6.36-14.36a1 1 0 0 1 -1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1 -1 1zm0 17a1 1 0 0 1 -1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1 -1 1zm-5.66-14.66a1 1 0 0 1 -.7-.29l-.71-.71a1 1 0 0 1 1.41-1.41l.71.71a1 1 0 0 1 0 1.41 1 1 0 0 1 -.71.29zm12.02 12.02a1 1 0 0 1 -.7-.29l-.66-.71a1 1 0 0 1 1.36-1.36l.71.71a1 1 0 0 1 0 1.41 1 1 0 0 1 -.71.24z"></path>
+                        </g>
+                    </svg>
+                </span>
+
+                <span class="moon" v-if="isDarkMode">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512">
+                        <g fill="#fafff9">
+                        <path d="m223.5 32c-123.5 0-223.5 100.3-223.5 224s100 224 223.5 224c60.6 0 115.5-24.2 155.8-63.4 5-4.9 6.3-12.5 3.1-18.7s-10.1-9.7-17-8.5c-9.8 1.7-19.8 2.6-30.1 2.6-96.9 0-175.5-78.8-175.5-176 0-65.8 36-123.1 89.3-153.3 6.1-3.5 9.2-10.5 7.7-17.3s-7.3-11.9-14.3-12.5c-6.3-.5-12.6-.8-19-.8z"></path>
+                        </g>
+                    </svg>
+                </span>
+
+                <input type="checkbox" class="theme-input" v-model="isDarkMode">
+            </label>
+        </ul>
+    </nav>
+
+    <!-- 右侧绿色边栏 -->
+
+    <!-- 展示区 -->
+    <div class="main-content">
+        <RouterView></RouterView>
+    </div>
+
+</div>
+
+
+</template>
+
+<script lang="ts" setup name="App">
+import { RouterView, RouterLink,useRoute } from 'vue-router';
+import { ref, watch, onMounted } from 'vue';
+
+// 定义当前路由路径
+const route = useRoute();
+const currentRoute = ref(route.path);
+
+// 定义导航项数据
+const navItems = [
+    { path: '/', text: '回到首页', image: '/DeepSeek-r1.jpg' },
+    { path: '/bot_test', text: '创建新的聊天', icon: 'iconfont icon-cangku' },
+    { path: '/History', text: '历史记录', icon: 'iconfont icon-zhuti_tiaosepan' },
+    { path: '/About_ourselves', text: '关于我们', icon: 'iconfont icon-tupian' },
+    { path: '/graph', text: '文献图谱', icon: 'iconfont icon-tuoputu' }
+];
+
+// 监听路由变化，更新当前激活的导航项
+watch(() => route.path, (newPath) => {
+    currentRoute.value = newPath;
+});
+
+// 点击导航项时设置当前激活的导航项
+function setActiveLink(path: string) {
+    currentRoute.value = path;
+}
+
+// 主题切换逻辑
+const isDarkMode = ref(localStorage.getItem('theme') === 'dark');
+
+// 监听主题切换
+watch(isDarkMode, (newVal) => {
+    if (newVal) {
+        document.body.classList.add('dark-theme');
+        localStorage.setItem('theme', 'dark');
+    } else {
+        document.body.classList.remove('dark-theme');
+        localStorage.setItem('theme', 'light');
+    }
+});
+
+// 初始化主题
+onMounted(() => {
+    if (isDarkMode.value) {
+        document.body.classList.add('dark-theme');
+    }
+});
+
+</script>
+
+<style>
+    @import url("../src/assets/styles/App.css");
+</style>
+
+===== src/router/index.ts =====
+
+import { createRouter, createWebHashHistory } from 'vue-router';
+
+import home            from '@/pages/home.vue';
+import bot_test        from '@/pages/bot_test.vue';
+import about_ourselves from '@/pages/about_ourselves.vue';
+import history         from '@/pages/history.vue';
+import Login           from '@/components/LoginForm.vue';
+import Register        from '@/components/RegisterForm.vue';
+import LiteratureGraph from '@/components/LiteratureGraph.vue';
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    { name: 'firstPage',  path: '/home',            component: home },
+    { name: 'secondPage', path: '/Bot_test',        component: bot_test },
+    { name: 'thirdPage',  path: '/About_ourselves', component: about_ourselves },
+    { name: 'forthPage',  path: '/History',         component: history },
+    { name: 'literatureGraph', path: '/graph', component: LiteratureGraph },
+
+    // 登录 / 注册
+    { name: 'login',    path: '/login',    component: Login },
+    { name: 'register', path: '/register', component: Register },
+
+    // 默认重定向
+    { path: '/', redirect: '/home' },
+  ],
+});
+
+export default router;
+
+===== src/store/history.ts =====
+
+import { defineStore } from "pinia";
+// 定义一个仓库
+
+
+
+===== src/components/LiteratureGraph.vue =====
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+import * as d3 from 'd3';
+import axios from 'axios';        // ← 新增
+
+const svgRef  = ref<SVGSVGElement | null>(null);
+const tooltip = ref<HTMLDivElement>();
+
+/* ---------- 关键词搜索 ---------- */
+const keyword = ref('');
+const doSearch = async () => {
+  if (!keyword.value.trim()) return;
+  const { data } = await axios.get(
+    `/api/search?q=${encodeURIComponent(keyword.value)}`
+  );
+
+  /* 归一化坐标（复用原逻辑） */
+  interface Paper { x: number; y: number; title: string; year: number; [key: string]: any }
+  const xRaw = data.nodes.map((d: Paper) => d.x);
+  const yRaw = data.nodes.map((d: Paper) => d.y);
+  const xMin = Math.min(...xRaw), xMax = Math.max(...xRaw);
+  const yMin = Math.min(...yRaw), yMax = Math.max(...yRaw);
+  data.nodes.forEach((d: Paper) => {
+    d.x = ((d.x - xMin) / (xMax - xMin) - 0.5) * 700;
+    d.y = ((d.y - yMin) / (yMax - yMin) - 0.5) * 500;
+  });
+
+  /* 替换并重绘 */
+  const nodes = data.nodes as any[];
+  const edges = data.edges as any[];
+  const width = 1200, height = 1000;
+
+  d3.select(svgRef.value).selectAll('*').remove();
+  const svg = d3.select(svgRef.value).attr('viewBox', `0 0 ${width} ${height}`);
+  const g   = svg.append('g');
+
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id((d: any) => d.id).distance(50))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(width / 2, height / 2));
+
+  const link = g.append('g')
+    .selectAll('line')
+    .data(edges)
+    .enter().append('line')
+    .attr('stroke', '#999');
+
+  const node = g.append('g')
+    .selectAll('circle')
+    .data(nodes)
+    .enter().append('circle')
+    .attr('r', 5)
+    .attr('fill', (d: any) => d3.schemeCategory10[d.year % 10])
+    .call(
+      d3.drag<SVGCircleElement, any>()
+        .on('start', (e, d) => { simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+        .on('end', (e, d) => { simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+    )
+    .on('mouseover', (e, d: any) => {
+      d3.select(tooltip.value!)
+        .style('opacity', 1)
+        .html(`<strong>${d.title}</strong><br>${d.authors?.join?.(', ')}<br>${d.year}`)
+        .style('left', `${e.pageX + 10}px`)
+        .style('top', `${e.pageY - 20}px`);
+    })
+    .on('mouseout', () => d3.select(tooltip.value!).style('opacity', 0));
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', (d: any) => d.source.x)
+      .attr('y1', (d: any) => d.source.y)
+      .attr('x2', (d: any) => d.target.x)
+      .attr('y2', (d: any) => d.target.y);
+    node
+      .attr('cx', (d: any) => d.x)
+      .attr('cy', (d: any) => d.y);
+  });
+};
+
+/* ---------- 初始加载 ---------- */
+onMounted(async () => {
+  const { data } = await axios.get('/api/graph');
+  /* 归一化 & 渲染 */
+  interface Paper { x: number; y: number; title: string; year: number; [key: string]: any }
+  const xRaw = data.nodes.map((d: Paper) => d.x);
+  const yRaw = data.nodes.map((d: Paper) => d.y);
+  const xMin = Math.min(...xRaw), xMax = Math.max(...xRaw);
+  const yMin = Math.min(...yRaw), yMax = Math.max(...yRaw);
+  data.nodes.forEach((d: Paper) => {
+    d.x = ((d.x - xMin) / (xMax - xMin) - 0.5) * 700;
+    d.y = ((d.y - yMin) / (yMax - yMin) - 0.5) * 500;
+  });
+  doSearch();   // 首次渲染用 /api/graph
+});
+</script>
+
+===== src/components/LoginForm.vue =====
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import axios from 'axios';
+import { useRouter } from 'vue-router';
+
+const email = ref('');
+const password = ref('');
+const router = useRouter();
+
+const login = async () => {
+  try {
+    await axios.post('/api/auth/login', { email: email.value, password: password.value });
+    router.replace('/home');          // 登录成功跳主页
+  } catch (e: any) {
+    alert(e.response?.data?.message || '登录失败');
+  }
+};
+</script>
+
+<template>
+  <form class="form" @submit.prevent="login">
+    <p class="form-title">登录</p>
+
+    <div class="input-container">
+      <input v-model="email" type="email" placeholder="邮箱" required />
+    </div>
+
+    <div class="input-container">
+      <input v-model="password" type="password" placeholder="密码" required />
+    </div>
+
+    <button type="submit" class="submit">登录</button>
+
+    <p class="signup-link">
+      还没有账号？
+      <RouterLink to="/register">立即注册</RouterLink>
+    </p>
+  </form>
+</template>
+
+<style scoped>
+/* 直接把你给的样式原样贴进来即可 */
+ .form {
+    background-color: #fff;
+    display: block;
+    padding: 1rem;
+    max-width: 350px;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .form-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    font-weight: 600;
+    text-align: center;
+    color: #000;
+  }
+
+  .input-container {
+    position: relative;
+  }
+
+  .input-container input, .form button {
+    outline: none;
+    border: 1px solid #e5e7eb;
+    margin: 8px 0;
+  }
+
+  .input-container input {
+    background-color: #fff;
+    padding: 1rem;
+    padding-right: 3rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    width: 300px;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  .input-container span {
+    display: grid;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    place-content: center;
+  }
+
+  .input-container span svg {
+    color: #9CA3AF;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .submit {
+    display: block;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    background-color: #4F46E5;
+    color: #ffffff;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    width: 100%;
+    border-radius: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .signup-link {
+    color: #6B7280;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    text-align: center;
+  }
+
+  .signup-link a {
+    text-decoration: underline;
+  }
+</style>
+
+===== src/components/RegisterForm.vue =====
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import axios from 'axios';
+import { useRouter } from 'vue-router';
+
+const email = ref('');
+const password = ref('');
+const router = useRouter();
+
+const register = async () => {
+  try {
+    await axios.post('/api/auth/register', { email: email.value, password: password.value });
+    alert('注册成功！请登录');
+    router.replace('/login');
+  } catch (e: any) {
+    alert(e.response?.data?.message || '注册失败');
+  }
+};
+</script>
+
+<template>
+  <form class="form" @submit.prevent="register">
+    <p class="form-title">注册</p>
+
+    <div class="input-container">
+      <input v-model="email" type="email" placeholder="邮箱" required />
+    </div>
+
+    <div class="input-container">
+      <input v-model="password" type="password" placeholder="密码（≥6 位）" minlength="6" required />
+    </div>
+
+    <button type="submit" class="submit">注册</button>
+
+    <p class="signup-link">
+      已有账号？
+      <RouterLink to="/login">去登录</RouterLink>
+    </p>
+  </form>
+</template>
+
+<style scoped>
+/* 同上，样式复用 */
+ .form {
+    background-color: #fff;
+    display: block;
+    padding: 1rem;
+    max-width: 350px;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .form-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    font-weight: 600;
+    text-align: center;
+    color: #000;
+  }
+
+  .input-container {
+    position: relative;
+  }
+
+  .input-container input, .form button {
+    outline: none;
+    border: 1px solid #e5e7eb;
+    margin: 8px 0;
+  }
+
+  .input-container input {
+    background-color: #fff;
+    padding: 1rem;
+    padding-right: 3rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    width: 300px;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  .input-container span {
+    display: grid;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    place-content: center;
+  }
+
+  .input-container span svg {
+    color: #9CA3AF;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .submit {
+    display: block;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    background-color: #4F46E5;
+    color: #ffffff;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    width: 100%;
+    border-radius: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .signup-link {
+    color: #6B7280;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    text-align: center;
+  }
+
+  .signup-link a {
+    text-decoration: underline;
+  }
+</style>   
+
+===== src/pages/about_ourselves.vue =====
+
+<template>
+
+</template>
+
+<script>
+</script>
+
+<style>
+</style>
+
+===== src/pages/bot_test.vue =====
+
+<template>
+  <div class="chat-container">
+
+    <div class="chat-box">
+      <ul class="message-list" ref="messageList">
+        <li
+          class="message-item"
+          v-for="(message, index) in messages"
+          :key="index"
+          :class="message.type === 'user' ? 'text-right' : 'text-left'"
+        >
+
+          <div class="message-content">
+            <!-- 思考内容 -->
+            <div
+              v-if="message.type === 'bot' && message.think && showThink"
+              class="think"
+            >
+              {{ message.think }}
+            </div>
+
+            <!-- 打字机效果的动态文本 -->
+            <div class="dynamic-text">
+              <span v-html="message.displayText"></span>
+            </div>
+          </div>
+
+        </li>
+      </ul>
+    </div>
+
+    <div class="chat-input">
+      <input
+        type="text"
+        id="chat-input"
+        placeholder="输入消息并按Enter键发送"
+        v-model="userInput"
+        @keydown.enter="sendMessage"
+      />
+      <button @click="sendMessage">发送</button>
+    </div>
+    <!-- 切换思考内容显示的按钮 -->
+    <button
+      class="toggle-think-button"
+      @click="toggleThinkContent"
+    >
+      {{ showThink ? "隐藏思考内容" : "显示思考内容" }}
+    </button>
+
+  </div>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      userInput: "",
+      messages: [],
+      showThink: false,
+    };
+  },
+  methods: {
+    async sendMessage() {
+      const inputText = this.userInput.trim();
+      if (!inputText) {
+        alert("请输入内容！");
+        return;
+      }
+
+      // 添加用户消息
+      this.messages.push({
+        type: "user",
+        displayText: inputText,
+      });
+      this.userInput = "";
+
+      // 添加加载状态的消息
+      this.messages.push({
+        type: "bot",
+        displayText: "正在思考...",
+        think: "正在思考...",
+      });
+
+      // 滚动到底部
+      this.scrollToBottom();
+
+      try {
+        // 调用Ollama接口
+        const botResponse = await this.getBotResponse(inputText);
+
+        // 替换加载状态的消息为实际回复
+        const lastMessageIndex = this.messages.length - 1;
+        this.messages[lastMessageIndex] = {
+          type: "bot",
+          displayText: botResponse.text,
+          think: botResponse.think,
+        };
+
+        // 模拟打字机效果
+        this.typeWriterEffect(
+          lastMessageIndex,
+          botResponse.text,
+          "displayText",
+          botResponse.think
+        );
+      } catch (error) {
+        console.error("获取回答时出错:", error);
+        const lastMessageIndex = this.messages.length - 1;
+        this.messages[lastMessageIndex] = {
+          type: "bot",
+          displayText: "抱歉，我无法回答你的问题。",
+        };
+      }
+
+      // 滚动到底部
+      this.scrollToBottom();
+    },
+    async getBotResponse(prompt) {
+      try {
+        const response = await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "my_ds_for_test/deepseek-r1", // 确保模型名称正确
+            prompt: prompt,
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("网络请求失败");
+        }
+
+        const data = await response.json();
+        const botResponse = data.response;
+
+        // 解析 <think> 标签内容
+        const { thinkContent, finalText } = this.extractThinkContent(botResponse);
+
+        return {
+          text: finalText,
+          think: thinkContent,
+        };
+      } catch (error) {
+        throw error;
+      }
+    },
+    extractThinkContent(response) {
+      const thinkRegex = /<think>(.*?)<\/think>/s;
+      const match = response.match(thinkRegex);
+
+      if (match) {
+        const thinkContent = match[1].trim();
+        const finalText = response.replace(thinkRegex, "").trim();
+        return { thinkContent, finalText };
+      } else {
+        return { thinkContent: "", finalText: response };
+      }
+    },
+    typeWriterEffect(index, text, field, thinkText) {
+  let dynamicText = "";
+  const speed = 5; // 打字速度（毫秒）
+
+  const intervalId = setInterval(() => {
+    if (dynamicText.length < text.length) {
+      dynamicText += text.charAt(dynamicText.length);
+      this.messages[index][field] = dynamicText; // 直接赋值即可
+      if (thinkText && this.showThink) {
+        this.messages[index].think = dynamicText;
+      }
+    } else {
+      clearInterval(intervalId);
+    }
+    this.scrollToBottom();
+  }, speed);
+},
+    scrollToBottom() {
+      const messageList = this.$refs.messageList;
+      messageList.scrollTop = messageList.scrollHeight;
+    },
+    toggleThinkContent() {
+      this.showThink = !this.showThink;
+    },
+  },
+  mounted() {
+    this.scrollToBottom();
+  },
+};
+</script>
+
+<style scoped>
+  @import url("../assets/styles/bot_test.css");
+</style>
+
+===== src/pages/history.vue =====
+
+<template>
+
+</template>
+
+<script>
+</script>
+
+<style>
+</style>
+
+===== src/pages/home.vue =====
+
+<template>
+<div class="home-wrapper">
+    <!-- 顶部欢迎区 + 登录/注册按钮 -->
+    <header class="hero">
+      <h1>欢迎来到 Vue3 + MongoDB Demo</h1>
+      <p>请先登录或注册，体验完整功能</p>
+
+      <div class="btn-group">
+        <RouterLink to="/login" class="btn primary">登录</RouterLink>
+        <RouterLink to="/register" class="btn secondary">注册</RouterLink>
+      </div>
+    </header>
+  </div>
+</template>
+
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    list-style: none;
+    text-decoration: none;
+}
+.home-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  text-align: center;
+}
+.hero h1 { margin-bottom: 0.5rem; }
+.btn {
+  margin: 0 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.primary  { background: #4f46e5; color: #fff; }
+.secondary{ background: #e5e7eb; color: #111; }
+</style>
+
+===== src/assets/scripts/App.js =====
+
+
+
+===== src/assets/styles/App.css =====

@@ -1,0 +1,201 @@
+
+.chat-container {
+    width: 100%;
+    height: 100%;
+    background-color: #fafff9;
+    box-shadow: 0 0 10px 3px rgba(0, 0, 0, 0.3);
+    margin: 20px auto;
+    border-radius: 10px;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 1fr 55px;
+    grid-template-areas: 
+    "chat-box";
+  }
+  
+  .chat-box {
+    grid-area: chat-box;
+    padding-top: 100px;
+    height: calc(100% - 120px);
+    padding-left: 250px;
+    padding-right: 250px;
+    overflow-y: auto;
+  }
+  
+  .message-list {
+    padding: 0;
+    list-style: none;
+  }
+  
+  .message-item {
+    margin: 10px 0;
+    display: flex;
+    align-items: flex-start;
+  }
+  
+  .message-content {
+    display: inline-block;
+    background-color: white;
+    border-radius: 7px;
+    padding: 6px 10px;
+    max-width: 80%;
+    position: relative;
+  }
+  
+  .message-content::after {
+    content: "";
+    position: absolute;
+    top: 10px;
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+    z-index: 10;
+  }
+  
+  .message-item.text-left .message-content {
+    background-color: #4f6f57;
+    color:#fafff9
+  }
+  
+  .message-item.text-left::before {
+    content:"";
+    width: 30px;
+    height: 30px;
+    border-radius: 3px;
+    display: inline-block;
+    background: url("../../../public/DeepSeek-r1.jpg") no-repeat center;
+    background-size: contain;
+    position: relative;
+    left: -10px;
+  }
+  
+  .message-item.text-right::after {
+    content:"";
+    width: 30px;
+    height: 30px;
+    border-radius: 3px;
+    display: inline-block;
+    background: url("../../../public/头像.png") no-repeat center;
+    background-size: cover;
+    position: relative;
+    margin-left: 10px;
+  }
+  
+  .message-item.text-left .message-content::after {
+    left: -8px;
+    border-right-color: #4f6f57;
+  }
+  
+  .message-item.text-right .message-content {
+    margin-left: auto;
+    margin-right: 0;
+    background-color: #c0dabd;
+    color:#4f6f57
+  }
+  
+  .message-item.text-right .message-content::after {
+    right: -8px;
+    border-left-color: #c0dabd;
+  }
+  
+  .think {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 5px;
+  }
+  
+  .chat-input {
+    grid-area: chat-input;
+    width:1180px;
+    position: absolute;
+    bottom: 0;
+    margin-left: 250px;
+    padding: 10px 20px;
+    background-color: #c0dabd;
+    display: flex;
+    align-items: center;
+    border-radius: 30px;
+  }
+  
+  .chat-input input {
+    flex: 1;
+    height: 33px;
+    padding: 0 12px;
+    border: 1px solid #dddddd;
+    border-radius: 18px;
+    margin-right: -66px;
+    margin-left: -5px;
+  }
+  
+  .chat-input button {
+    background-color: #4f6f57;
+    background-image: url(../pages/send.png) contain;
+    color: white;
+    border: none;
+    border-radius: 18px;
+    padding: 8px 20px;
+    cursor: pointer;
+  }
+  
+  .toggle-think-button {
+    position: absolute;
+    bottom: 60px;
+    left: 20px;
+    padding: 5px 10px;
+    background-color: #f0f0f0;
+    color: #333333;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  
+  .toggle-think-button:hover {
+    background-color: #e0e0e0;
+  }
+  
+  .dark-theme .chat-container {
+    background-color: #222222;
+  }
+  
+  .dark-theme .chat-box {
+    background-color: #222222;
+  }
+  
+  .dark-theme .message-item.text-left .message-content {
+    color:#c0dabd
+  }
+  
+  .dark-theme .message-item.text-right .message-content {
+    background-color: #fafff9;
+    color:#c0dabd
+  }
+  
+  .dark-theme .message-item.text-right .message-content::after {
+    border-left-color: #fafff9;
+  }
+  
+  
+  .dark-theme .chat-input input {
+    background-color: #333333;
+    border-color: #555555;
+    color: #ffffff;
+  }
+  
+  .dark-theme .chat-input button {
+    background-color: #0056b3;
+  }
+  
+  .dark-theme .chat-input button:hover {
+    background-color: #003f7f;
+  }
+  
+  .dark-theme .toggle-think-button {
+    background-color: #444444;
+    color: #888888;
+  }
+  
+  .dark-theme .toggle-think-button:hover {
+    background-color: #555555;
+  }
+  

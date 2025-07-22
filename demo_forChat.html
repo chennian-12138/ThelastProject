@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <div class="main">
+        <ul id="message">
+            <li>
+                <p class="time">下午6:30</p>
+            </li>
+            <li class="text-left">
+                <span>小刘啊，在忙吗？</span>
+            </li>
+            <li class="text-left">
+                <span>下午说的新需求要快点做完</span>
+            </li>
+            <li class="text-right">
+                <span>好的！</span>
+            </li>
+        </ul>
+        <div class="foot">
+            <span class="voice"></span>
+            <input type="text" id="inp" />
+            <span class="plus"></span>
+            <span class="expression"></span>
+        </div>
+    
+    </div>
+
+</body>
+
+<style>
+    *{
+        margin: 0;
+        padding: 0;
+    }
+
+    body{
+        font-size: 14px;
+    }
+    .main{
+        width:300px;
+        height: 500px;
+        position: relative;
+        background-color: #ededed;
+        box-shadow: 0 0 10px 3px rgba(0,0,0,0.3);
+        margin: 20px auto;
+    }
+    .main ul{
+        padding: 20px 30px;
+        list-style: none;
+    }
+    .main li{
+        padding: 5px;
+        margin-bottom: 10px;
+        position: relative;
+    }
+    .main .time{
+        color: #999;
+        text-align: center;
+        line-height: 20px;
+        font-size: 12px;
+    }
+    .main li span{
+        display: inline-block;
+        border-radius: 7px;
+        background-color: #a6e860;
+        padding: 6px 10px 8px 10px;
+        position: relative;
+    }
+
+    .main li.text-left span{
+        background-color: white;
+    }
+
+    .main li.text-left::before{
+        content:"";
+        width: 220px;
+        height: 220px;
+        border-radius: 3px;
+        display: block;
+        background-size: 100%;
+        background-color: url(pic.png) no-repeat center center;
+        position: absolute;
+        left: -25px;
+        top: 5px;
+    }
+
+    .main li.text-left span:after{
+        content: '';
+        display: block;
+        width: 0;
+        height: 0;
+        border: 4px solid transparent;
+        border-right:4px solid white;
+        position: absolute;
+        top: 6px;
+        left: -8px;
+    }
+
+    .text-right{
+        text-align: right;
+    }
+
+    .main li.text-right:after{
+        content:"";
+        width: 22px;
+        height: 22px;
+        border-radius: 3px;
+        display: block;
+        background-size: 100%;
+        background-color: url(pic2.png) no-repeat center center;
+        position: absolute;
+        right: -23px;
+        top: 5px;
+    }
+
+    .main li.text-right span:after{
+        content: '';
+        display: block;
+        width: 0;
+        height: 0;
+        border: 4px solid transparent;
+        border-left:4px solid #a6e860;
+        position: absolute;
+        top: 6px;
+        right: -8px;
+    }
+
+    .foot{
+        width: 100%;
+        box-sizing: border-box;
+        height: 40px;
+        position: absolute;
+        bottom: 0;
+        padding: 0 7px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: #f7f7f7;
+    }
+    .foot input{
+        width: 64%;
+        height: 30px;
+        border: none;
+        text-indent: 10px;
+        outline: medium;
+    }
+    .foot span{
+        width: 22px;
+        height: 22px;
+    }
+    .voice{
+        background: url(./voice.jpg) no-repeat center center ;
+        background-size: 100%;
+    }
+    .plus{
+        background: url(plus.png) no-repeat center center ;
+        background-size: 100%;
+    }
+    .expression{
+        background: url(expression.png) no-repeat center center ;
+        background-size: 100%;
+    }
+</style>
+
+<script>
+    let inp = document.getElementById('inp');
+    let message = document.getElementById('message');
+    document.onkeydown = function(e){
+        let ev = window.event || e;
+        let code = ev.keyCode || ev.which;
+        if(code == 13){
+            let val = inp.value;
+            let node = document.createElement('li');
+            node.setAttribute('class','text-right');
+            node.innerHTML = '<span>'+val+'</span>';
+            message.appendChild(node);
+            inp.value = '';
+}        }
+    
+</script>
+
+</html>

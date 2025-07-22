@@ -1,0 +1,6 @@
+let response =await fetch('http://127.0.01/login', {userName, password, method: 'post});
+let json = await response.json();
+{success: true, data}
+if (json.success) {
+	alert(data.message);
+}
