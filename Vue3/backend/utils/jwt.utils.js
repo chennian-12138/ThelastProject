@@ -11,3 +11,6 @@ export const verifyToken = (req, res, next) => {
     res.status(403).json({ message: '无效令牌' });
   }
 };
+
+// 为兼容性添加别名
+export const authenticateToken = verifyToken;

@@ -2,13 +2,16 @@ import mongoose from 'mongoose';
 
 const historySchema = new mongoose.Schema({
   userId: {
-    type: String,
-    required: true
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
   },
   type: {
     type: String,
     enum: ['chat', 'literature'],
-    required: true
+    required: true,
+    index: true
   },
   data: {
     type: mongoose.Schema.Types.Mixed,
@@ -16,10 +19,18 @@ const historySchema = new mongoose.Schema({
   },
   timestamp: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   }
+}, { 
+  timestamps: true,
+  indexes: [
+    { userId: 1, type: 1, timestamp: -1 },
+    { userId: 1, type: 1 }
+  ]
 });
 
-const History = mongoose.model('History', historySchema);
+// 添加复合索引优化查询
+historySchema.index({ userId: 1, type: 1, createdAt: -1 });
 
-export default History;
+export default mongoose.model('History', historySchema);

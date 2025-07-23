@@ -79,9 +79,9 @@ const currentRoute = ref(route.path);
 // 定义导航项数据
 const navItems = [
     { path: '/', text: '回到首页', image: '/DeepSeek-r1.jpg' },
-    { path: '/bot_test', text: '创建新的聊天', icon: 'iconfont icon-cangku' },
-    { path: '/History', text: '历史记录', icon: 'iconfont icon-zhuti_tiaosepan' },
-    { path: '/About_ourselves', text: '关于我们', icon: 'iconfont icon-tupian' },
+    { path: '/bot', text: '创建新的聊天', icon: 'iconfont icon-cangku' },
+    { path: '/history', text: '历史记录', icon: 'iconfont icon-zhuti_tiaosepan' },
+    { path: '/about', text: '关于我们', icon: 'iconfont icon-tupian' },
     { path: '/graph', text: '文献图谱', icon: 'iconfont icon-tuoputu' }
 ];
 

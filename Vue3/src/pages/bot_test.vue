@@ -60,18 +60,12 @@ export default {
       showThink: false,
     };
   },
-//   setup() {
-//   const history = useHistoryStore();
-//   history.add('chat', { role: 'user', text: inputText, timestamp: Date.now() });
-//   history.add('literature', {
-//   keyword: keyword.value,
-//   nodesCount: data.nodes.length,
-//   edgesCount: data.edges.length,
-//   timestamp: Date.now(),
-// });
-//   history.load();               // 刷新后读历史
-//   return { history };
-// },
+  setup() {
+    const history = useHistoryStore();
+    // 注意：这里不自动加载历史记录，避免401错误
+    // 历史记录会在用户登录后通过其他方式加载
+    return { history };
+  },
   methods: {
     async sendMessage() {
       const inputText = this.userInput.trim();
@@ -87,6 +81,13 @@ export default {
       });
       this.userInput = "";
 
+      // 保存用户消息到历史记录
+      this.history.add('chat', { 
+        role: 'user', 
+        text: inputText, 
+        timestamp: Date.now() 
+      });
+
       // 添加加载状态的消息
       this.messages.push({
         type: "bot",
@@ -98,7 +99,7 @@ export default {
       this.scrollToBottom();
 
       try {
-        // 调用Ollama接口
+        // 调用后端API接口
         const botResponse = await this.getBotResponse(inputText);
 
         // 替换加载状态的消息为实际回复
@@ -108,6 +109,13 @@ export default {
           displayText: botResponse.text,
           think: botResponse.think,
         };
+
+        // 保存bot回复到历史记录
+        this.history.add('chat', { 
+          role: 'bot', 
+          text: botResponse.text, 
+          timestamp: Date.now() 
+        });
 
         // 模拟打字机效果
         this.typeWriterEffect(
@@ -127,41 +135,32 @@ export default {
 
       // 滚动到底部
       this.scrollToBottom();
-      // // 用户消息 → 存历史
-      // this.history.addChat({ role: 'user', text: inputText, timestamp: Date.now() });
-
-      // // bot 回复 → 存历史
-      // const botText = botResponse.text;
-      // this.messages.push({ type: 'bot', displayText: botText });
-      // this.history.addChat({ role: 'bot', text: botText, timestamp: Date.now() });
     },
     async getBotResponse(prompt) {
       try {
-        const response = await fetch("http://localhost:11434/api/generate", {
+        const response = await fetch("http://localhost:3000/api/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem('token')}`
           },
           body: JSON.stringify({
-            model: "my_ds_for_test/deepseek-r1", // 确保模型名称正确
             prompt: prompt,
-            stream: false,
           }),
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error("认证失败，请重新登录");
+          }
           throw new Error("网络请求失败");
         }
 
         const data = await response.json();
-        const botResponse = data.response;
-
-        // 解析 <think> 标签内容
-        const { thinkContent, finalText } = this.extractThinkContent(botResponse);
-
+        
         return {
-          text: finalText,
-          think: thinkContent,
+          text: data.text,
+          think: data.think || "",
         };
       } catch (error) {
         throw error;
