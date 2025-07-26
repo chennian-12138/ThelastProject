@@ -39,6 +39,7 @@
 
 /* 侧边栏样式 */
 .sidebar {
+    position: fixed;
     grid-area: sidebar;
     background: #fff;
     height: 100vh;
@@ -47,10 +48,12 @@
     display: grid;
     grid-template-rows: auto 1fr auto;
     padding: 0;
+    width: 120px;
 }
 
 /* 主内容区域样式 */
 .main-content {
+    margin-left: 10px;
     grid-area: main-content;
     background-color: var(--bg-color);
     overflow: auto;

@@ -1,5 +1,5 @@
 <template>
-  <div class="landing-container">
+  <div class="landing-container" :class="{ 'dark-theme': isDarkMode }">
     <!-- 背景动画 -->
     <div class="background-animation">
       <div class="particle" v-for="i in 50" :key="i"></div>
@@ -12,10 +12,29 @@
           <span class="logo-text">📚 文献助手</span>
         </div>
         <div class="nav-links">
-          <a href="#features" class="nav-link">功能特色</a>
           <a href="#about" class="nav-link">关于我们</a>
-          <a href="#contact" class="nav-link">联系我们</a>
           <button @click="handleLoginClick" class="login-btn">登录/注册</button>
+          <!-- 主题切换按钮 -->
+          <label class="theme-switch">
+            <span class="sun" v-if="!isDarkMode">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <g fill="currentColor">
+                  <circle r="5" cy="12" cx="12"></circle>
+                  <path d="m21 13h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 0 2zm-17 0h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 0 2zm13.66-5.66a1 1 0 0 1 -.66-.29 1 1 0 0 1 0-1.41l.71-.71a1 1 0 1 1 1.41 1.41l-.71.71a1 1 0 0 1 -.75.29zm-12.02 12.02a1 1 0 0 1 -.71-.29 1 1 0 0 1 0-1.41l.71-.66a1 1 0 0 1 1.41 1.41l-.71.71a1 1 0 0 1 -.7.24zm6.36-14.36a1 1 0 0 1 -1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1 -1 1zm0 17a1 1 0 0 1 -1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1 -1 1zm-5.66-14.66a1 1 0 0 1 -.7-.29l-.71-.71a1 1 0 0 1 1.41-1.41l.71.71a1 1 0 0 1 0 1.41 1 1 0 0 1 -.71.29zm12.02 12.02a1 1 0 0 1 -.7-.29l-.66-.71a1 1 0 0 1 1.36-1.36l.71.71a1 1 0 0 1 0 1.41 1 1 0 0 1 -.71.24z"></path>
+                </g>
+              </svg>
+            </span>
+
+            <span class="moon" v-if="isDarkMode">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512">
+                <g fill="currentColor">
+                  <path d="m223.5 32c-123.5 0-223.5 100.3-223.5 224s100 224 223.5 224c60.6 0 115.5-24.2 155.8-63.4 5-4.9 6.3-12.5 3.1-18.7s-10.1-9.7-17-8.5c-9.8 1.7-19.8 2.6-30.1 2.6-96.9 0-175.5-78.8-175.5-176 0-65.8 36-123.1 89.3-153.3 6.1-3.5 9.2-10.5 7.7-17.3s-7.3-11.9-14.3-12.5c-6.3-.5-12.6-.8-19-.8z"></path>
+                </g>
+              </svg>
+            </span>
+
+            <input type="checkbox" class="theme-input" v-model="isDarkMode">
+          </label>
         </div>
       </div>
     </nav>
@@ -242,6 +261,20 @@ const stats = ref({
 const router = useRouter();
 const showLoginModal = ref(false);
 
+// 主题切换逻辑 - 复用App.vue的实现
+const isDarkMode = ref(localStorage.getItem('theme') === 'dark');
+
+// 监听主题切换
+watch(isDarkMode, (newVal) => {
+    if (newVal) {
+        document.body.classList.add('dark-theme');
+        localStorage.setItem('theme', 'dark');
+    } else {
+        document.body.classList.remove('dark-theme');
+        localStorage.setItem('theme', 'light');
+    }
+});
+
 // 检查登录状态
 const isLoggedIn = ref(false);
 
@@ -295,8 +328,12 @@ const fetchStats = async () => {
   }
 };
 
-
 onMounted(() => {
+  // 初始化主题
+  if (isDarkMode.value) {
+    document.body.classList.add('dark-theme');
+  }
+  
   checkLoginStatus();
   recordVisit();
   fetchStats();
@@ -311,10 +348,16 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 </script>
 
 <style scoped>
+/* 恢复最初的配色方案 */
 .landing-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   overflow-x: hidden;
+}
+
+/* 暗色主题 */
+.dark-theme .landing-container {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 
 /* 背景动画 */
@@ -332,9 +375,13 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   position: absolute;
   width: 4px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   animation: float 20s infinite linear;
+}
+
+.dark-theme .particle {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 @keyframes float {
@@ -357,17 +404,6 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   }
 }
 
-/* 为每个粒子设置随机位置和延迟 */
-.particle:nth-child(odd) {
-  animation-delay: -5s;
-  left: 10%;
-}
-
-.particle:nth-child(even) {
-  animation-delay: -10s;
-  left: 50%;
-}
-
 /* 导航栏 */
 .navbar {
   position: fixed;
@@ -377,6 +413,10 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   backdrop-filter: blur(10px);
   z-index: 1000;
   padding: 1rem 0;
+}
+
+.dark-theme .navbar {
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .nav-container {
@@ -422,6 +462,30 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 
 .login-btn:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* 主题切换按钮 */
+.theme-switch {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.theme-switch:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.theme-switch svg {
+  width: 20px;
+  height: 20px;
+}
+
+.theme-input {
+  display: none;
 }
 
 /* 英雄区域 */
@@ -489,14 +553,14 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 }
 
 .cta-primary {
-  background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+  background: linear-gradient(45deg, #667eea, #764ba2);
   color: white;
-  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
 .cta-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
 .cta-secondary {
@@ -528,6 +592,11 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   animation: float-card 6s ease-in-out infinite;
 }
 
+.dark-theme .floating-card {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .card-2 {
   top: 50px;
   left: 150px;
@@ -541,12 +610,9 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 }
 
 @keyframes float-card {
-
-  0%,
-  100% {
+  0%, 100% {
     transform: translateY(0px) rotate(0deg);
   }
-
   50% {
     transform: translateY(-20px) rotate(5deg);
   }
@@ -572,6 +638,10 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   background: white;
 }
 
+.dark-theme .features {
+  background: #1a1a2e;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -581,8 +651,12 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 .section-title {
   text-align: center;
   font-size: 2.5rem;
-  color: #2c3e50;
+  color: #667eea;
   margin-bottom: 3rem;
+}
+
+.dark-theme .section-title {
+  color: #667eea;
 }
 
 .features-grid {
@@ -595,12 +669,20 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   background: white;
   border-radius: 15px;
   padding: 2.5rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.1);
   transition: transform 0.3s ease;
+  border: 1px solid #e0e0e0;
+}
+
+.dark-theme .feature-card {
+  background: #2a2a3e;
+  border: 1px solid #3a3a4e;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .feature-card:hover {
   transform: translateY(-10px);
+  box-shadow: 0 15px 40px rgba(102, 126, 234, 0.2);
 }
 
 .feature-icon {
@@ -622,14 +704,22 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 
 .feature-card h3 {
   font-size: 1.5rem;
-  color: #2c3e50;
+  color: #667eea;
   margin-bottom: 1rem;
 }
 
+.dark-theme .feature-card h3 {
+  color: #667eea;
+}
+
 .feature-card p {
-  color: #7f8c8d;
+  color: #333;
   line-height: 1.6;
   margin-bottom: 1rem;
+}
+
+.dark-theme .feature-card p {
+  color: #ccc;
 }
 
 .feature-card ul {
@@ -638,23 +728,31 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 }
 
 .feature-card li {
-  color: #34495e;
+  color: #666;
   margin-bottom: 0.5rem;
   position: relative;
   padding-left: 1.5rem;
+}
+
+.dark-theme .feature-card li {
+  color: #aaa;
 }
 
 .feature-card li::before {
   content: "✓";
   position: absolute;
   left: 0;
-  color: #27ae60;
+  color: #667eea;
 }
 
 /* 使用流程 */
 .workflow {
   padding: 5rem 0;
   background: #f8f9fa;
+}
+
+.dark-theme .workflow {
+  background: #16213e;
 }
 
 .workflow-steps {
@@ -669,7 +767,13 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   padding: 1.5rem;
   background: white;
   border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+  border: 1px solid #e0e0e0;
+}
+
+.dark-theme .step {
+  background: #2a2a3e;
+  border: 1px solid #3a3a4e;
 }
 
 .step-number {
@@ -687,12 +791,20 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 }
 
 .step-content h3 {
-  color: #2c3e50;
+  color: #667eea;
   margin-bottom: 0.5rem;
 }
 
+.dark-theme .step-content h3 {
+  color: #667eea;
+}
+
 .step-content p {
-  color: #7f8c8d;
+  color: #666;
+}
+
+.dark-theme .step-content p {
+  color: #aaa;
 }
 
 /* 统计数据 */
@@ -727,6 +839,10 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   padding: 3rem 0 1rem;
 }
 
+.dark-theme .footer {
+  background: #0f3460;
+}
+
 .footer-content {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -737,6 +853,7 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 .footer-section h3,
 .footer-section h4 {
   margin-bottom: 1rem;
+  color: #ecf0f1;
 }
 
 .footer-section ul {
@@ -761,7 +878,7 @@ watch(() => localStorage.getItem('token'), (newToken) => {
   text-align: center;
   padding-top: 2rem;
   border-top: 1px solid #34495e;
-  color: #bdc3c7;
+  color: #95a5a6;
 }
 
 /* 响应式设计 */
@@ -788,10 +905,15 @@ watch(() => localStorage.getItem('token'), (newToken) => {
 
   .nav-links {
     gap: 1rem;
+    flex-wrap: wrap;
   }
 
   .nav-link {
     display: none;
+  }
+
+  .theme-switch {
+    margin-left: auto;
   }
 }
 </style>
