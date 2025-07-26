@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Benzene Resonance Loader</title>
+<style>
+:root{
+  --size:120px;          /* 苯环整体大小 */
+  --bond:6px;            /* 键粗 */
+  --speed:2.2s;          /* 动画周期 */
+  --color:black;
+}
+
+body{margin:0;height:100vh;background-color: white;display:flex;align-items:center;justify-content:center}
+
+/* ===== 骨架 ===== */
+.benzene{
+  position:relative;
+  /* animation:spin var(--speed) linear infinite; */
+}
+.side{                 /* 6 条边 */
+  position:absolute;
+  width:calc(var(--size)/2);
+  height:var(--bond);
+  background:var(--color);
+  border-radius:var(--bond);  
+  transform-origin:0 50%;
+}
+.side:nth-child(1){transform:translate(0px,calc(var(--size)*0.5*0.866)) rotate(0deg);}
+.side:nth-child(2){transform:translate(0px,calc(var(--size)*(-0.5)*0.866)) rotate(0deg);}
+.side:nth-child(3){transform-origin: right; transform:translate(calc(var(--size)*0.5*0.5),0px) rotate(60deg);}
+.side:nth-child(4){transform-origin: right; transform:translate(calc(var(--size)*0.5*0.5),0px) rotate(-60deg);}
+.side:nth-child(5){transform:translate(calc(var(--size)*0.5*(-0.5)),0px) rotate(60deg);}
+.side:nth-child(6){transform:translate(calc(var(--size)*0.5*(-0.5)),0px) rotate(-60deg);}
+
+.box{
+  transform: translate(0,-30px);
+}
+.loader {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border-top: 8px solid black;
+  border-left: 8px solid black;
+  border-right: 8px solid white;
+  animation: loader .7s infinite linear;
+}
+
+@keyframes loader {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>
+</head>
+<body>
+
+  <div class="loader">
+  <div class="benzene">
+    <!-- 6 根 C-C 键 -->
+    <div class="side"></div><div class="side"></div><div class="side"></div>
+    <div class="side"></div><div class="side"></div><div class="side"></div>
+    <div class="box">
+    <div class="loader"></div>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -307,73 +307,76 @@ svg {
 }
 
 /* 加载动画样式 */
-.container {
-  --uib-size: 80px;
-  --uib-speed: 2.5s;
-  --uib-color: #334dff;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: var(--uib-size);
-  width: var(--uib-size);
+/* 仅替换原来的 .container 及以下部分 */
+.container{
+  --uib-size:150px;
+  --uib-speed:2.5s;
+  position:relative;
+  width:var(--uib-size);
+  height:var(--uib-size);
 }
 
-.slice {
-  position: relative;
-  height: calc(var(--uib-size) / 6);
-  width: 100%;
+/* 6 条旋转臂，每条负责 4 个球（2 前 2 后） */
+.slice{
+  position:absolute;
+  top:0;left:0;
+  width:100%;height:100%;
+  transform:rotate(calc(var(--idx) * 60deg));   /* 60° 一份 */
 }
 
+/* 4 个伪元素 = 2 前链 + 2 后链 */
 .slice::before,
-.slice::after {
-  --uib-a: calc(var(--uib-speed) / -2);
-  --uib-b: calc(var(--uib-speed) / -6);
-  content: "";
-  position: absolute;
-  top: 0;
-  left: calc(50% - var(--uib-size) / 12);
-  height: 100%;
-  width: calc(100% / 6);
-  border-radius: 50%;
-  background-color: var(--uib-color);
-  flex-shrink: 0;
-  animation: orbit var(--uib-speed) linear infinite;
-  transition: background-color 0.3s ease;
+.slice::after{
+  content:'';
+  position:absolute;
+  top:0;left:50%;
+  width:calc(var(--uib-size)/16);          /* 球更小一点，24 个不拥挤 */
+  height:calc(var(--uib-size)/16);
+  margin-left:calc(var(--uib-size)/-32);
+  border-radius:50%;
+  animation:orbitRing var(--uib-speed) linear infinite;
 }
 
-.slice:nth-child(1)::after { animation-delay: var(--uib-a); }
-.slice:nth-child(2)::before { animation-delay: var(--uib-b); }
-.slice:nth-child(2)::after { animation-delay: calc(var(--uib-a) + var(--uib-b)); }
-.slice:nth-child(3)::before { animation-delay: calc(var(--uib-b) * 2); }
-.slice:nth-child(3)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 2); }
-.slice:nth-child(4)::before { animation-delay: calc(var(--uib-b) * 3); }
-.slice:nth-child(4)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 3); }
-.slice:nth-child(5)::before { animation-delay: calc(var(--uib-b) * 4); }
-.slice:nth-child(5)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 4); }
-.slice:nth-child(6)::before { animation-delay: calc(var(--uib-b) * 5); }
-.slice:nth-child(6)::after { animation-delay: calc(var(--uib-a) + var(--uib-b) * 5); }
+/* 第二条链反向旋转 */
+.slice::after{ animation-direction:reverse; }
 
-@keyframes orbit {
-  0% { transform: translateX(calc(var(--uib-size) * 0.25)) scale(0.73684); opacity: 0.65; }
-  25% { transform: translateX(0%) scale(0.47368); opacity: 0.3; }
-  50% { transform: translateX(calc(var(--uib-size) * -0.25)) scale(0.73684); opacity: 0.65; }
-  75% { transform: translateX(0%) scale(1); opacity: 1; }
-  100% { transform: translateX(calc(var(--uib-size) * 0.25)) scale(0.73684); opacity: 0.65; }
-}
+/* 让同一条臂上的两个球错开 15°，这样 6×4 = 24 个球均匀分布 */
+.slice::before{ animation-delay:calc(var(--idx) * -0.2083s); }
+.slice::after{  animation-delay:calc(var(--idx) * -0.2083s - var(--uib-speed)/2); }
 
+/* 颜色依旧 6 组，每组 4 个同色 */
+.slice:nth-child(1){ --idx:0; }
 .slice:nth-child(1)::before,
-.slice:nth-child(1)::after { background-color: #334dff; }
+.slice:nth-child(1)::after{ background:#334dff; }
+
+.slice:nth-child(2){ --idx:1; }
 .slice:nth-child(2)::before,
-.slice:nth-child(2)::after { background-color: #333eff; }
+.slice:nth-child(2)::after{ background:#333eff; }
+
+.slice:nth-child(3){ --idx:2; }
 .slice:nth-child(3)::before,
-.slice:nth-child(3)::after { background-color: #3334ff; }
+.slice:nth-child(3)::after{ background:#3334ff; }
+
+.slice:nth-child(4){ --idx:3; }
 .slice:nth-child(4)::before,
-.slice:nth-child(4)::after { background-color: #4433ff; }
+.slice:nth-child(4)::after{ background:#4433ff; }
+
+.slice:nth-child(5){ --idx:4; }
 .slice:nth-child(5)::before,
-.slice:nth-child(5)::after { background-color: #6633ff; }
+.slice:nth-child(5)::after{ background:#6633ff; }
+
+.slice:nth-child(6){ --idx:5; }
 .slice:nth-child(6)::before,
-.slice:nth-child(6)::after { background-color: #9933ff; }
+.slice:nth-child(6)::after{ background:#9933ff; }
+
+/* 公转轨道 + 缩放节奏，沿用你原来的曲线 */
+@keyframes orbitRing{
+  0%   { transform:translateX(calc(var(--uib-size)*0.38)) scale(0.73684); opacity:0.65; }
+  25%  { transform:translateX(0%)                                   scale(0.47368); opacity:0.3;  }
+  50%  { transform:translateX(calc(var(--uib-size)*-0.38)) scale(0.73684); opacity:0.65; }
+  75%  { transform:translateX(0%)                                   scale(1);       opacity:1;   }
+  100% { transform:translateX(calc(var(--uib-size)*0.38)) scale(0.73684); opacity:0.65; }
+}
 
 .paper-card {
   position: absolute;
