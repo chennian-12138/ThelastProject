@@ -13,6 +13,7 @@ import fetchRoutes from './routes/fetch.routes.js';
 import tempGraphRoutes from './routes/temp_graph.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import statsRoutes from './routes/stats.routes.js';
+import userRoutes from './routes/user.routes.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ app.use('/api/history', historyRoutes);
 app.use('/api', tempGraphRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', statsRoutes);
+app.use('/api', userRoutes);
 
 console.log('✅ /api/temp_graph 路由已注册');
 console.log('✅ /api/chat 路由已注册');

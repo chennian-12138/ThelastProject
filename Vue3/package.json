@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.3",
     "morgan": "^1.10.0",
+    "multer": "^2.0.2",
     "npyjs": "^0.7.0",
     "pinia": "^3.0.1",
     "vue": "^3.5.13",

@@ -99,14 +99,16 @@
       </div>
     </div>
   </div>
+
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import axios from 'axios';
 
 const router = useRouter();
-
+const fileInput = ref<HTMLInputElement | null>(null);
 const userName = ref('用户');
 const userAvatar = ref('/头像.png');
 const userInfo = ref({
@@ -123,14 +125,17 @@ const stats = ref({
   graphViews: 0
 });
 
-const recentActivities = ref([
-  { id: 1, icon: '🔍', title: '搜索了"机器学习"', time: new Date() },
-  { id: 2, icon: '💬', title: '与AI助手对话', time: new Date(Date.now() - 3600000) },
-  { id: 3, icon: '📊', title: '查看了文献图谱', time: new Date(Date.now() - 7200000) }
-]);
+interface ActivityItem {
+  id: string;
+  icon: string;
+  title: string;
+  time: Date;
+}
 
-const loadUserData = () => {
-  // 从localStorage获取用户信息
+const recentActivities = ref<ActivityItem[]>([]);
+
+const loadUserData = async () => {
+  // 获取用户信息
   const userData = localStorage.getItem('user');
   if (userData) {
     const user = JSON.parse(userData);
@@ -142,6 +147,17 @@ const loadUserData = () => {
     };
     userName.value = user.username || '用户';
   }
+
+  // 获取用户统计数据
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.get('http://localhost:3000/api/user/stats', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    stats.value = response.data;
+  } catch (error) {
+    console.error('获取统计数据失败:', error);
+  }
 };
 
 const formatDate = (dateString: string) => {
@@ -152,8 +168,57 @@ const formatDateTime = (date: Date) => {
   return date.toLocaleString('zh-CN');
 };
 
-const editField = (field: string) => {
-  console.log('编辑字段:', field);
+const editField = async (field: string) => {
+  const newValue = prompt(`请输入新的${field === 'username' ? '用户名' : '邮箱'}:`);
+  if (!newValue) return;
+
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.put('http://localhost:3000/api/user/update', 
+      { [field]: newValue },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (response.data.success) {
+      userInfo.value[field as keyof typeof userInfo.value] = newValue;
+      if (field === 'username') {
+        userName.value = newValue;
+      }
+      localStorage.setItem('user', JSON.stringify(userInfo.value));
+    }
+  } catch (error: any) {
+    alert('更新失败: ' + (error.response?.data?.error || error.message));
+  }
+};
+// 在模板中添加文件输入
+const handleAvatarUpload = async (event: Event) => {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.post('http://localhost:3000/api/user/avatar', 
+      formData,
+      { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        } 
+      }
+    );
+
+    if (response.data.success) {
+      userAvatar.value = response.data.avatar;
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      userData.avatar = response.data.avatar;
+      localStorage.setItem('user', JSON.stringify(userData));
+    }
+  } catch (error: any) {
+    alert('上传失败: ' + (error.response?.data?.error || error.message));
+  }
 };
 
 const goToPage = (path: string) => {
@@ -166,9 +231,22 @@ const logout = () => {
   router.push('/');
 };
 
-onMounted(() => {
-  loadUserData();
+onMounted(async () => {
+  await loadUserData();
+  
+  // 获取最近活动
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.get('http://localhost:3000/api/user/activities', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    recentActivities.value = response.data;
+  } catch (error) {
+    console.error('获取活动失败:', error);
+  }
 });
+
+
 </script>
 
 <!-- 其余样式保持不变... -->
