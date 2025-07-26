@@ -11,26 +11,19 @@ router.get('/stats', async (req, res) => {
     const [
       userCount,
       chatCount,
-      literatureGraphCount,
+      literatureSearchCount,
       visitRecord
     ] = await Promise.all([
       User.countDocuments(),
       History.countDocuments({ type: 'chat' }),
-      History.countDocuments({ 
-        $or: [
-          { type: 'literature' },
-          { 'data.type': 'literature' },
-          { 'data.action': 'literature_graph' },
-          { 'data.source': 'LiteratureGraph' }
-        ]
-      }),
-      Visit.findOne().sort({ date: -1 })  // 获取最新的访问记录
+      History.countDocuments({ type: 'literature' }), // 简化为只统计 type 为 literature 的记录
+      Visit.findOne().sort({ date: -1 })
     ]);
 
     res.json({
       users: userCount,
       chats: chatCount,
-      searches: literatureGraphCount,
+      searches: literatureSearchCount,
       visits: visitRecord ? visitRecord.count : 0
     });
   } catch (error) {

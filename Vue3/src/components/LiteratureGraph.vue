@@ -69,6 +69,22 @@ const doSearch = async () => {
     }
     sessionTag.value = data.session_tag;
     await loadGraph();
+
+    const token = localStorage.getItem('token');
+    if (token) {
+      await axios.post('http://localhost:3000/api/history', {
+        type: 'literature',
+        data: {
+          action: 'view_graph',
+          query: keyword.value,
+          nodesCount: data.count,
+          timestamp: Date.now()
+        }
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    }
+
     history.add('literature', {
       keyword: keyword.value,
       nodesCount: data.count,

@@ -135,19 +135,42 @@ interface ActivityItem {
 const recentActivities = ref<ActivityItem[]>([]);
 
 const loadUserData = async () => {
-  // 获取用户信息
-  const userData = localStorage.getItem('user');
-  if (userData) {
-    const user = JSON.parse(userData);
-    userInfo.value = {
-      username: user.username || '用户',
-      email: user.email || '',
-      createdAt: user.createdAt || new Date().toISOString(),
-      lastLogin: user.lastLogin || new Date().toISOString()
-    };
-    userName.value = user.username || '用户';
+  // 从后端获取最新的用户信息，而不是依赖 localStorage
+  try {
+    const token = localStorage.getItem('token');
+    if (token) {
+      // 获取用户信息
+      const userResponse = await axios.get('http://localhost:3000/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const user = userResponse.data.user;
+      
+      userInfo.value = {
+        username: user.username || user.email.split('@')[0], // 使用邮箱前缀作为默认用户名
+        email: user.email,
+        createdAt: user.createdAt || new Date().toISOString(),
+        lastLogin: user.lastLogin || new Date().toISOString()
+      };
+      userName.value = user.username || user.email.split('@')[0];
+      
+      // 更新 localStorage
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error);
+    // 回退到 localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const user = JSON.parse(userData);
+      userInfo.value = {
+        username: user.username || user.email.split('@')[0],
+        email: user.email,
+        createdAt: user.createdAt || new Date().toISOString(),
+        lastLogin: user.lastLogin || new Date().toISOString()
+      };
+      userName.value = user.username || user.email.split('@')[0];
+    }
   }
-
   // 获取用户统计数据
   try {
     const token = localStorage.getItem('token');
