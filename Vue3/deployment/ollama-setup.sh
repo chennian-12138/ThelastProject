@@ -1,9 +1,8 @@
 #!/bin/bash
-# Ollama生产环境安装和配置脚本
+# Ollama专用配置脚本
+# 用于管理和配置Ollama服务
 
-echo "========================================"
-echo "    Ollama 生产环境安装脚本"
-echo "========================================"
+set -e
 
 # 颜色输出
 RED='\033[0;31m'
@@ -11,124 +10,179 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# 检查系统要求
-echo -e "${YELLOW}[1/6] 检查系统要求...${NC}"
-if ! command -v curl &> /dev/null; then
-    echo -e "${RED}错误：curl 未安装${NC}"
+log() {
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+error() {
+    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
     exit 1
+}
+
+warning() {
+    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+}
+
+# 检查是否以root权限运行
+if [[ $EUID -ne 0 ]]; then
+    error "请使用root权限运行此脚本: sudo ./ollama-setup.sh"
 fi
 
-# 安装Ollama
-echo -e "${YELLOW}[2/6] 安装Ollama...${NC}"
-curl -fsSL https://ollama.ai/install.sh | sh
-if [ $? -ne 0 ]; then
-    echo -e "${RED}错误：Ollama安装失败${NC}"
-    exit 1
+log "开始配置Ollama..."
+
+# 1. 检查Ollama是否已安装
+if ! command -v ollama &> /dev/null; then
+    log "安装Ollama..."
+    curl -fsSL https://ollama.com/install.sh | sh
 fi
 
-# 启动Ollama服务
-echo -e "${YELLOW}[3/6] 启动Ollama服务...${NC}"
-sudo systemctl start ollama
-sudo systemctl enable ollama
+# 2. 创建Ollama服务配置
+log "创建Ollama服务配置..."
+cat > /etc/systemd/system/ollama.service << EOF
+[Unit]
+Description=Ollama Service
+After=network-online.target
 
-# 等待服务启动
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="PATH=$PATH"
+
+[Install]
+WantedBy=default.target
+EOF
+
+# 3. 创建ollama用户
+if ! id -u ollama &> /dev/null; then
+    log "创建ollama用户..."
+    useradd -r -s /bin/false ollama
+fi
+
+# 4. 设置权限
+log "设置Ollama权限..."
+chown -R ollama:ollama /usr/share/ollama
+mkdir -p /usr/share/ollama/.ollama
+chown -R ollama:ollama /usr/share/ollama/.ollama
+
+# 5. 重新加载systemd
+log "重新加载systemd..."
+systemctl daemon-reload
+
+# 6. 启动Ollama服务
+log "启动Ollama服务..."
+systemctl start ollama
+systemctl enable ollama
+
+# 7. 等待服务启动
+log "等待Ollama服务启动..."
 sleep 5
 
-# 检查服务状态
-if ! systemctl is-active --quiet ollama; then
-    echo -e "${RED}错误：Ollama服务启动失败${NC}"
-    exit 1
-fi
+# 8. 拉取必要的模型
+log "拉取AI模型..."
+MODELS=("my_ds_for_test/deepseek-r1" "nomic-embed-text")
+for model in "${MODELS[@]}"; do
+    log "拉取模型: $model"
+    ollama pull $model || warning "无法拉取模型: $model"
+done
 
-# 下载所需模型
-echo -e "${YELLOW}[4/6] 下载AI模型...${NC}"
-
-# 下载DeepSeek模型（用于对话）
-echo -e "${YELLOW}  下载 DeepSeek-R1 模型...${NC}"
-ollama pull deepseek-r1:7b
-
-# 下载nomic-embed-text模型（用于向量化）
-echo -e "${YELLOW}  下载 nomic-embed-text 模型...${NC}"
-ollama pull nomic-embed-text
-
-# 验证模型下载
-echo -e "${YELLOW}[5/6] 验证模型...${NC}"
-if ollama list | grep -q "deepseek-r1"; then
-    echo -e "${GREEN}  ✓ DeepSeek模型已就绪${NC}"
-else
-    echo -e "${RED}  ✗ DeepSeek模型下载失败${NC}"
-fi
-
-if ollama list | grep -q "nomic-embed-text"; then
-    echo -e "${GREEN}  ✓ nomic-embed-text模型已就绪${NC}"
-else
-    echo -e "${RED}  ✗ nomic-embed-text模型下载失败${NC}"
-fi
-
-# 配置Ollama服务
-echo -e "${YELLOW}[6/6] 配置Ollama服务...${NC}"
-
-# 创建Ollama配置文件
-sudo mkdir -p /etc/systemd/system/ollama.service.d
-sudo tee /etc/systemd/system/ollama.service.d/override.conf > /dev/null <<EOF
-[Service]
-Environment="OLLAMA_HOST=0.0.0.0"
-Environment="OLLAMA_ORIGINS=*"
-EOF
-
-# 重新加载配置并重启服务
-sudo systemctl daemon-reload
-sudo systemctl restart ollama
-
-# 设置防火墙规则（如果启用）
-if sudo ufw status | grep -q "Status: active"; then
-    echo -e "${YELLOW}配置防火墙...${NC}"
-    sudo ufw allow 11434/tcp
-fi
-
-# 创建模型更新脚本
-sudo tee /usr/local/bin/update-ollama-models.sh > /dev/null <<'EOF'
-#!/bin/bash
-# Ollama模型更新脚本
-echo "开始更新Ollama模型..."
-ollama pull deepseek-r1:7b
-ollama pull nomic-embed-text
-echo "模型更新完成"
-EOF
-
-sudo chmod +x /usr/local/bin/update-ollama-models.sh
-
-# 创建服务监控脚本
-sudo tee /usr/local/bin/check-ollama.sh > /dev/null <<'EOF'
-#!/bin/bash
-# Ollama服务监控脚本
-if ! systemctl is-active --quiet ollama; then
-    echo "$(date): Ollama服务未运行，正在重启..."
-    sudo systemctl start ollama
-fi
-EOF
-
-sudo chmod +x /usr/local/bin/check-ollama.sh
-
-# 添加到crontab（每5分钟检查一次）
-(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/bin/check-ollama.sh >> /var/log/ollama-check.log 2>&1") | crontab -
-
-echo "========================================"
-echo -e "${GREEN}Ollama安装和配置完成！${NC}"
-echo "========================================"
-echo
-echo "服务状态："
-systemctl status ollama --no-pager -l
-echo
-echo "已安装模型："
+# 9. 验证模型
+log "验证已安装的模型..."
 ollama list
-echo
-echo "API端点："
-echo "  对话API: http://localhost:11434/api/generate"
-echo "  向量化API: http://localhost:11434/api/embeddings"
-echo
-echo "测试命令："
-echo "  curl http://localhost:11434/api/generate -d '{\"model\":\"deepseek-r1:7b\",\"prompt\":\"你好\",\"stream\":false}'"
-echo
-echo "如需更新模型，运行："
-echo "  sudo /usr/local/bin/update-ollama-models.sh"
+
+# 10. 测试连接
+log "测试Ollama连接..."
+if curl -f http://localhost:11434/api/tags > /dev/null 2>&1; then
+    log "Ollama连接正常"
+else
+    error "无法连接到Ollama服务"
+fi
+
+# 11. 创建模型管理脚本
+log "创建模型管理脚本..."
+cat > /usr/local/bin/ollama-manage.sh << 'EOF'
+#!/bin/bash
+# Ollama模型管理脚本
+
+case "$1" in
+    start)
+        systemctl start ollama
+        echo "Ollama服务已启动"
+        ;;
+    stop)
+        systemctl stop ollama
+        echo "Ollama服务已停止"
+        ;;
+    restart)
+        systemctl restart ollama
+        echo "Ollama服务已重启"
+        ;;
+    status)
+        systemctl status ollama
+        ;;
+    logs)
+        journalctl -u ollama -f
+        ;;
+    models)
+        ollama list
+        ;;
+    pull)
+        if [ -z "$2" ]; then
+            echo "用法: $0 pull <model-name>"
+            exit 1
+        fi
+        ollama pull "$2"
+        ;;
+    *)
+        echo "用法: $0 {start|stop|restart|status|logs|models|pull <model>}"
+        exit 1
+        ;;
+esac
+EOF
+
+chmod +x /usr/local/bin/ollama-manage.sh
+
+# 12. 创建开机自启检查
+log "创建开机自启检查..."
+cat > /etc/systemd/system/ollama-check.service << EOF
+[Unit]
+Description=Check Ollama models on boot
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ollama-check-models.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /usr/local/bin/ollama-check-models.sh << 'EOF'
+#!/bin/bash
+# 检查并确保必要模型已安装
+
+REQUIRED_MODELS=("my_ds_for_test/deepseek-r1" "nomic-embed-text")
+for model in "${REQUIRED_MODELS[@]}"; do
+    if ! ollama list | grep -q "$model"; then
+        echo "拉取缺失的模型: $model"
+        ollama pull "$model"
+    fi
+done
+EOF
+
+chmod +x /usr/local/bin/ollama-check-models.sh
+
+# 13. 启用服务
+systemctl daemon-reload
+systemctl enable ollama-check
+
+log "Ollama配置完成！"
+log "使用方法:"
+log "  查看状态: ollama-manage.sh status"
+log "  查看日志: ollama-manage.sh logs"
+log "  查看模型: ollama-manage.sh models"
+log "  拉取模型: ollama-manage.sh pull <model-name>"
